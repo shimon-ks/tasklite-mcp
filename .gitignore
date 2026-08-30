@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.tgz
+
+# Internal working documents and operational runbooks. These stay on disk but
+# are not part of the published repository: they carry launch planning, server
+# addresses and deployment steps that are of no use to anyone outside.
+CAPABILITIES_PLAN.md
+SUBMISSION.md
+SUBMISSION-ASSETS.md
+LAUNCH-HN.md
+DEPLOY-HOSTED.md
+TRY-IT.md
+deploy/
+submission-screenshots/
+
+# Unreviewed legal drafts. They carry DRAFT markers and unfilled placeholders,
+# and belong on the website once counsel has signed them off, not in a repo.
+legal/
+
+# Local credentials, never commit
+.env
+.env.*
+*.pem
+credentials.json

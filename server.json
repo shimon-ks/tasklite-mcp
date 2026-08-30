@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "net.tasklite/mcp",
+  "title": "TaskLite",
+  "description": "Build a real backend from Claude: boards, data, REST APIs and a ready-made admin UI",
+  "version": "0.5.6",
+  "websiteUrl": "https://tasklite.net/docs",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.tasklite.net/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@tasklite/mcp",
+      "version": "0.5.6",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
