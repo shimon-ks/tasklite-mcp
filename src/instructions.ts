@@ -71,6 +71,17 @@ Every item has a comment thread (its correspondence): list_comments to read it,
 add_comment to post, passing mentionedUserIds to notify people. Needs projectId +
 itemId (get itemId from query_items).
 
+When the app's users should be TaskLite external users instead (the app
+signs them up through POST /auth/register-external with the organizationId
+and logs them in through POST /auth/login), the organization decides who gets
+in: configure_external_access sets the registration policy ("open" — in at
+once; "approval" — an admin approves each one, and TaskLite mails the org's
+admins on every signup; "closed" — invite only) and appLoginUrl, the page of
+YOUR app where those users log in. Set appLoginUrl whenever you deploy such an
+app: it is the "Log in" button in the approval email, and without it the
+approved user is told nothing about where to go. Unapproved users are never
+billed.
+
 Confirm before delete_item. Creation tools return an adminUrl, so end by telling
 the user where their ready-made admin is. Pass organizationId explicitly when the
 user has more than one org.`;

@@ -116,6 +116,7 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   login: { title: 'Sign in to TaskLite with email and password', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   disconnect: { title: 'Disconnect TaskLite account', readOnlyHint: false, destructiveHint: true },
   list_organizations: { title: 'List organizations', readOnlyHint: true },
+  configure_external_access: { title: 'Configure external user access', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   list_projects: { title: 'List projects', readOnlyHint: true },
   create_project: { title: 'Create project', readOnlyHint: false, destructiveHint: false },
   create_board: { title: 'Create board', readOnlyHint: false, destructiveHint: false },
@@ -385,6 +386,50 @@ export function registerTools(
     'List the organizations the authenticated user belongs to. Use the returned id as organizationId in other tools.',
     {},
     async () => ok(await getApi().request('GET', '/organizations')),
+  );
+
+  tool(
+    'configure_external_access',
+    'Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: "open" — in at once; "approval" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); "closed" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the "Log in" button in the approval email, so set it whenever you deploy an app that uses this flow; pass "" to clear. Call with no changes to just read the current settings. Requires organization admin.',
+    {
+      organizationId: z.string().optional().describe('Defaults to the credential organization'),
+      registrationPolicy: z.enum(['closed', 'approval', 'open']).optional(),
+      appLoginUrl: z
+        .string()
+        .optional()
+        .describe("https URL of your app's login page for external users; \"\" clears it"),
+    },
+    async ({ organizationId, registrationPolicy, appLoginUrl }) => {
+      const orgId = await resolveOrg(organizationId);
+      const settings: Record<string, unknown> = {};
+      if (registrationPolicy !== undefined) settings.externalRegistrationPolicy = registrationPolicy;
+      if (appLoginUrl !== undefined) {
+        const value = appLoginUrl.trim();
+        if (value && !/^https?:\/\/\S+$/i.test(value)) {
+          throw new Error('appLoginUrl must be an absolute http(s) URL, e.g. https://app.example.com/login');
+        }
+        settings.externalAppUrl = value;
+      }
+      const org =
+        Object.keys(settings).length > 0
+          ? await getApi().request<any>('PATCH', `/organizations/${orgId}`, { settings })
+          : await getApi().request<any>('GET', `/organizations/${orgId}`);
+      const current = (org && org.settings) || {};
+      return ok({
+        organizationId: orgId,
+        registrationPolicy: current.externalRegistrationPolicy || 'closed',
+        appLoginUrl: current.externalAppUrl || null,
+        approvalsUrl: `${envAppUrl()}/organization/settings`,
+        signupEndpoint: `${envApiUrl()}/auth/register-external`,
+        loginEndpoint: `${envApiUrl()}/auth/login`,
+        note:
+          (current.externalRegistrationPolicy || 'closed') === 'approval'
+            ? 'Each signup waits for an admin; admins are emailed with a link to approvalsUrl, and the user is emailed (with appLoginUrl as the button) once approved.'
+            : (current.externalRegistrationPolicy || 'closed') === 'open'
+              ? 'Signups are active immediately.'
+              : 'Self-signup is refused; external users are created by an admin.',
+      });
+    },
   );
 
   tool(
