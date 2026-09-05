@@ -6,7 +6,7 @@ are folded into the next published one, so the numbers on npm may skip.
 ## 0.7.1 — 2026-09-06
 
 ### Changed
-- Every tool parameter now carries a description (89 added), so clients and directories show what each argument means.
+- Every tool parameter now carries a description (155 parameters across 44 tools), so clients and directories show what each argument means.
 
 ### Fixed
 - Hosted server: `resources/list` and `prompts/list` join the discovery methods that work without a credential (directory scanners logged them as failures).

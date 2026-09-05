@@ -569,7 +569,7 @@ export function registerTools(
   tool(
     'get_board_schema',
     'Get a board with its full column schema (ids, names, types, settings). Call this before creating items with cells.',
-    { projectId: z.string(), boardId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
     async ({ projectId, boardId }) => {
       const [board, columns] = await Promise.all([
         getApi().request('GET', `/projects/${projectId}/boards/${boardId}`),
@@ -599,7 +599,7 @@ export function registerTools(
   tool(
     'delete_board',
     'Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.',
-    { projectId: z.string(), boardId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
     async ({ projectId, boardId }) => {
       await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}`);
       return ok({ deleted: true, boardId });
@@ -642,7 +642,7 @@ export function registerTools(
   tool(
     'delete_column',
     'Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.',
-    { projectId: z.string(), boardId: z.string(), columnId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), columnId: z.string().describe('Column id (from get_board_schema)') },
     async ({ projectId, boardId, columnId }) => {
       await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}/columns/${columnId}`);
       return ok({ deleted: true, columnId });
@@ -652,7 +652,7 @@ export function registerTools(
   tool(
     'reorder_columns',
     'Set the display order of a board\'s columns. Pass every column id in the wanted order (get_board_schema lists them).',
-    { projectId: z.string(), boardId: z.string(), columnIds: z.array(z.string()).min(1) },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), columnIds: z.array(z.string()).min(1).describe('Column ids in the new order (every column of the board)') },
     async ({ projectId, boardId, columnIds }) => {
       return ok(await getApi().request('PUT', `/projects/${projectId}/boards/${boardId}/columns/reorder`, { columnIds }));
     },
@@ -726,7 +726,7 @@ export function registerTools(
       boardId: z.string().describe('Board id (from list_boards / create_board)'),
       title: z.string().describe('Item title, shown as the row name'),
       description: z.string().optional().describe('Free-text description'),
-      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board's status options)'),
+      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board\'s status options)'),
       priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
       dueDate: z.string().optional().describe('ISO date'),
       tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
@@ -745,7 +745,7 @@ export function registerTools(
       itemId: z.string().describe('Item (row) id'),
       title: z.string().optional().describe('Item title, shown as the row name'),
       description: z.string().optional().describe('Free-text description'),
-      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board's status options)'),
+      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board\'s status options)'),
       priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
       dueDate: z.string().optional().describe('Due date, ISO 8601 (YYYY-MM-DD or full timestamp)'),
       tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
@@ -792,7 +792,7 @@ export function registerTools(
   tool(
     'delete_item',
     'Delete an item. Destructive — confirm with the user before calling.',
-    { projectId: z.string(), boardId: z.string(), itemId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), itemId: z.string().describe('Item id (from query_items / create_item)') },
     async ({ projectId, boardId, itemId }) =>
       ok(
         await getApi().request(
@@ -879,7 +879,7 @@ export function registerTools(
   tool(
     'delete_comment',
     'Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.',
-    { projectId: z.string(), itemId: z.string(), commentId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), itemId: z.string().describe('Item id (from query_items / create_item)'), commentId: z.string().describe('Comment id (from list_comments / add_comment)') },
     async ({ projectId, itemId, commentId }) =>
       ok(
         await getApi().request(
@@ -894,7 +894,7 @@ export function registerTools(
   tool(
     'create_app',
     'Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.',
-    { name: z.string(), projectId: z.string(), organizationId: z.string().optional() },
+    { name: z.string().describe('Human-readable name'), projectId: z.string().describe('Project id (from list_projects / create_project)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ name, projectId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       const app = await getApi().request<any>('POST', `/organizations/${orgId}/apps`, {
@@ -908,7 +908,7 @@ export function registerTools(
   tool(
     'publish_app',
     'Publish an app — required before its API endpoints accept external calls.',
-    { appId: z.string(), organizationId: z.string().optional() },
+    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(await getApi().request('POST', `/organizations/${orgId}/apps/${appId}/publish`, {}));
@@ -932,10 +932,12 @@ export function registerTools(
             readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
-        .optional(),
+        .optional()
+        .describe('Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata'),
       rowLevelSecurity: z
-        .object({ enabled: z.boolean(), filterByUserId: z.boolean().optional() })
-        .optional(),
+        .object({ enabled: z.boolean().describe('Scope every request to the calling app user (X-App-User header)'), filterByUserId: z.boolean().optional().describe('Also filter reads to rows the user created') })
+        .optional()
+        .describe('Row-level security: when enabled, each app user sees and edits only their own rows'),
       organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, organizationId, ...body }) => {
@@ -958,7 +960,7 @@ export function registerTools(
   tool(
     'list_app_endpoints',
     'List an app\'s REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.',
-    { appId: z.string(), organizationId: z.string().optional() },
+    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
@@ -984,7 +986,8 @@ export function registerTools(
             readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
-        .optional(),
+        .optional()
+        .describe('Replacement list of exposed columns (same shape as create_app_endpoint)'),
       isActive: z.boolean().optional().describe('Whether it is active'),
       organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
@@ -1003,7 +1006,7 @@ export function registerTools(
   tool(
     'create_app_api_key',
     'Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.',
-    { appId: z.string(), name: z.string().optional(), organizationId: z.string().optional() },
+    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), name: z.string().optional().describe('Human-readable name'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ appId, name, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
@@ -1027,7 +1030,7 @@ export function registerTools(
         'column_value_changed',
         'date_approaching',
         'scheduled',
-      ]),
+      ]).describe('Event that starts the automation: item_created, status_changed, column_value_changed, date_approaching, or scheduled (cron)'),
       triggerConfig: z
         .record(z.any())
         .optional()
@@ -1078,7 +1081,7 @@ export function registerTools(
   tool(
     'list_automations',
     'List the automations on a board, so you can see what already runs before adding another.',
-    { projectId: z.string(), boardId: z.string() },
+    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
     async ({ projectId, boardId }) =>
       ok(await getApi().request('GET', `/projects/${projectId}/boards/${boardId}/automations`)),
   );
@@ -1086,7 +1089,7 @@ export function registerTools(
   tool(
     'list_apps',
     'List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.',
-    { organizationId: z.string().optional() },
+    { organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(await getApi().request('GET', `/organizations/${orgId}/apps`));
@@ -1096,7 +1099,7 @@ export function registerTools(
   tool(
     'get_app_spec',
     'Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.',
-    { appId: z.string(), organizationId: z.string().optional() },
+    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(await getApi().request('GET', `/organizations/${orgId}/apps/${appId}/spec/json`));
@@ -1335,7 +1338,7 @@ export function registerTools(
   tool(
     'list_deployments',
     'List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.',
-    { appId: z.string(), organizationId: z.string().optional() },
+    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
