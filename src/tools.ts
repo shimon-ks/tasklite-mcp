@@ -219,7 +219,7 @@ export function registerTools(
       'sign_up',
       'Create a brand-new TaskLite account + organization and connect this machine — no website visit needed. A strong random password is generated locally and never shown or stored; for web access the user later uses "forgot password" with this email. Ask the user for email, their name, and a business name before calling.',
       {
-        email: z.string().email(),
+        email: z.string().email().describe('Email address'),
         name: z.string().describe("The user's full name"),
         organizationName: z.string().describe('Business/organization name'),
       },
@@ -309,7 +309,7 @@ export function registerTools(
       'login',
       'Connect this machine to an existing TaskLite account with email + password, or switch to a different account. Creates a personal API key named "claude-code" on that account and stores it, so the password is used once and never saved. Replaces the current connection if there is one. Prefer connect when the user already has a tl_ key.',
       {
-        email: z.string().email(),
+        email: z.string().email().describe('Email address'),
         password: z.string().describe('Used once to mint an API key; never stored'),
       },
       async ({ email, password }) => {
@@ -411,7 +411,7 @@ export function registerTools(
     'Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: "open" — in at once; "approval" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); "closed" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the "Log in" button in the approval email, so set it whenever you deploy an app that uses this flow; pass "" to clear. Call with no changes to just read the current settings. Requires organization admin.',
     {
       organizationId: z.string().optional().describe('Defaults to the credential organization'),
-      registrationPolicy: z.enum(['closed', 'approval', 'open']).optional(),
+      registrationPolicy: z.enum(['closed', 'approval', 'open']).optional().describe('How external sign-ups are admitted: open, approval or closed'),
       appLoginUrl: z
         .string()
         .optional()
@@ -472,7 +472,7 @@ export function registerTools(
     'list_boards',
     'List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
       page: z.number().optional().describe('1-based; defaults to 1'),
       limit: z.number().optional().describe('Defaults to 50'),
     },
@@ -489,9 +489,9 @@ export function registerTools(
     'create_project',
     'Create a project (a business process container). Boards with data live inside projects.',
     {
-      name: z.string(),
-      description: z.string().optional(),
-      organizationId: z.string().optional(),
+      name: z.string().describe('Human-readable name'),
+      description: z.string().optional().describe('Free-text description'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ name, description, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
@@ -508,9 +508,9 @@ export function registerTools(
     'create_board',
     'Create a board (a data table) inside a project. Add typed columns with create_column afterwards.',
     {
-      projectId: z.string(),
-      name: z.string(),
-      description: z.string().optional(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      name: z.string().describe('Human-readable name'),
+      description: z.string().optional().describe('Free-text description'),
     },
     async ({ projectId, name, description }) => {
       const board = await getApi().request<any>('POST', `/projects/${projectId}/boards`, {
@@ -526,17 +526,17 @@ export function registerTools(
     'create_column',
     'Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      name: z.string(),
-      type: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      name: z.string().describe('Human-readable name'),
+      type: z.string().describe('Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file'),
       settings: z
         .record(z.any())
         .optional()
         .describe(
           'Type-specific settings. For dropdown/status/priority: options, either as labels ["A","B"] or as full objects [{value,label,color}] — labels are expanded server-side, and colors are assigned if you do not supply them.',
         ),
-      isRequired: z.boolean().optional(),
+      isRequired: z.boolean().optional().describe('Require a non-blank value on every App API create'),
       force: z
         .boolean()
         .optional()
@@ -585,10 +585,10 @@ export function registerTools(
     'update_board',
     'Rename a board or change its description. Structure (columns) is changed with update_column / delete_column / reorder_columns.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      name: z.string().optional(),
-      description: z.string().optional(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      name: z.string().optional().describe('Human-readable name'),
+      description: z.string().optional().describe('Free-text description'),
     },
     async ({ projectId, boardId, ...rest }) => {
       const body = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
@@ -610,15 +610,15 @@ export function registerTools(
     'update_column',
     'Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      columnId: z.string(),
-      name: z.string().optional(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      columnId: z.string().describe('Column id (from get_board_schema)'),
+      name: z.string().optional().describe('Human-readable name'),
       type: z.string().optional().describe('New column type (same list as create_column)'),
       settings: z.record(z.unknown()).optional().describe('Replaces the column settings, e.g. { options: [...] } for dropdown/status'),
-      isRequired: z.boolean().optional(),
-      isHidden: z.boolean().optional(),
-      description: z.string().optional(),
+      isRequired: z.boolean().optional().describe('Require a non-blank value on every App API create'),
+      isHidden: z.boolean().optional().describe('Hide the column in the TaskLite UI'),
+      description: z.string().optional().describe('Free-text description'),
       force: z.boolean().optional().describe('Skip the name/type sanity check'),
     },
     async ({ projectId, boardId, columnId, force, ...rest }) => {
@@ -662,7 +662,7 @@ export function registerTools(
     'export_project',
     'The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model\'s sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.',
     {
-      projectId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
       organizationId: z.string().optional().describe('Defaults to the credential organization'),
       maxItemsPerBoard: z.number().int().positive().max(2000).optional().describe('Default 200'),
     },
@@ -691,8 +691,8 @@ export function registerTools(
     'query_items',
     'List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates).',
     {
-      projectId: z.string(),
-      boardId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
       limit: z.number().int().positive().max(500).optional().describe('Page size; omit to fetch all items'),
       page: z.number().int().positive().optional().describe('1-based page, only with limit'),
     },
@@ -722,15 +722,15 @@ export function registerTools(
     'create_item',
     'Create an item (row) with all of its data in one call. cells maps columnId -> value (use get_board_schema for column ids); every cell is saved with the row. Use set_cell only for later edits.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      title: z.string(),
-      description: z.string().optional(),
-      status: z.string().optional(),
-      priority: z.string().optional(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      title: z.string().describe('Item title, shown as the row name'),
+      description: z.string().optional().describe('Free-text description'),
+      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board's status options)'),
+      priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
       dueDate: z.string().optional().describe('ISO date'),
-      tags: z.array(z.string()).optional(),
-      cells: z.record(z.any()).optional(),
+      tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
+      cells: z.record(z.any()).optional().describe('Cell values keyed by column id: { "<columnId>": value }. Scalars, { amount, currency } for currency, { relatedItemIds: [...] } for relations'),
     },
     async ({ projectId, boardId, ...body }) =>
       ok(await getApi().request('POST', `/projects/${projectId}/boards/${boardId}/items`, body)),
@@ -740,15 +740,15 @@ export function registerTools(
     'update_item',
     'Update item fields (title, description, status, priority, dueDate, tags).',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      itemId: z.string(),
-      title: z.string().optional(),
-      description: z.string().optional(),
-      status: z.string().optional(),
-      priority: z.string().optional(),
-      dueDate: z.string().optional(),
-      tags: z.array(z.string()).optional(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      itemId: z.string().describe('Item (row) id'),
+      title: z.string().optional().describe('Item title, shown as the row name'),
+      description: z.string().optional().describe('Free-text description'),
+      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board's status options)'),
+      priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
+      dueDate: z.string().optional().describe('Due date, ISO 8601 (YYYY-MM-DD or full timestamp)'),
+      tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
     },
     async ({ projectId, boardId, itemId, ...body }) =>
       ok(
@@ -764,10 +764,10 @@ export function registerTools(
     'set_cell',
     'Set a single cell value on an item by columnId.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      itemId: z.string(),
-      columnId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      itemId: z.string().describe('Item (row) id'),
+      columnId: z.string().describe('Column id (from get_board_schema)'),
       value: z
         .union([
           z.string(),
@@ -808,8 +808,8 @@ export function registerTools(
     'list_comments',
     'List the comments (the correspondence thread) on an item, oldest first. Each comment includes its author and any @mentions. Needs projectId and itemId (get itemId from query_items).',
     {
-      projectId: z.string(),
-      itemId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      itemId: z.string().describe('Item (row) id'),
       page: z.number().int().positive().optional().describe('1-based page, default 1'),
       limit: z.number().int().positive().max(100).optional().describe('Page size, default 20'),
     },
@@ -831,8 +831,8 @@ export function registerTools(
     'add_comment',
     "Post a comment on an item's thread. To notify people, pass their user ids in mentionedUserIds (each also appears as an @mention). attachmentIds references already-uploaded files. Needs projectId and itemId.",
     {
-      projectId: z.string(),
-      itemId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      itemId: z.string().describe('Item (row) id'),
       content: z.string().describe('The comment text'),
       mentionedUserIds: z
         .array(z.string())
@@ -861,9 +861,9 @@ export function registerTools(
     'update_comment',
     'Edit the text of an existing comment. Only the author can edit their comment. Needs projectId, itemId and the commentId.',
     {
-      projectId: z.string(),
-      itemId: z.string(),
-      commentId: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      itemId: z.string().describe('Item (row) id'),
+      commentId: z.string().describe('Comment id (from list_comments)'),
       content: z.string().describe('The new comment text'),
     },
     async ({ projectId, itemId, commentId, content }) =>
@@ -919,24 +919,24 @@ export function registerTools(
     'create_app_endpoint',
     'Expose a board as a REST endpoint of an app: /apps/{appSlug}/api/{slug}. exposedColumns limits which columns are readable/writable. rowLevelSecurity.enabled makes the endpoint per-user: the developer\'s server sends `X-App-User: <their user id>` next to the API key, and the endpoint returns, updates and deletes ONLY that user\'s rows (401 without the header). Use it whenever the app has its own users.',
     {
-      appId: z.string(),
-      boardId: z.string(),
-      slug: z.string(),
-      name: z.string(),
-      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional(),
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      slug: z.string().describe('URL slug: lowercase letters, digits and dashes'),
+      name: z.string().describe('Human-readable name'),
+      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE'),
       exposedColumns: z
         .array(
           z.object({
-            columnId: z.string(),
-            alias: z.string().optional(),
-            readOnly: z.boolean().optional(),
+            columnId: z.string().describe('Column id (from get_board_schema)'),
+            alias: z.string().optional().describe('JSON key exposed for this column (letters, digits, underscore; reserved item fields refused)'),
+            readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
         .optional(),
       rowLevelSecurity: z
         .object({ enabled: z.boolean(), filterByUserId: z.boolean().optional() })
         .optional(),
-      organizationId: z.string().optional(),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, organizationId, ...body }) => {
       // Without exposedColumns the endpoint answers reads with bare item
@@ -971,22 +971,22 @@ export function registerTools(
     'update_app_endpoint',
     'Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.',
     {
-      appId: z.string(),
-      endpointId: z.string(),
-      slug: z.string().optional(),
-      name: z.string().optional(),
-      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional(),
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      endpointId: z.string().describe('Endpoint id (from list_app_endpoints)'),
+      slug: z.string().optional().describe('URL slug: lowercase letters, digits and dashes'),
+      name: z.string().optional().describe('Human-readable name'),
+      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE'),
       exposedColumns: z
         .array(
           z.object({
-            columnId: z.string(),
-            alias: z.string().optional(),
-            readOnly: z.boolean().optional(),
+            columnId: z.string().describe('Column id (from get_board_schema)'),
+            alias: z.string().optional().describe('JSON key exposed for this column (letters, digits, underscore; reserved item fields refused)'),
+            readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
         .optional(),
-      isActive: z.boolean().optional(),
-      organizationId: z.string().optional(),
+      isActive: z.boolean().optional().describe('Whether it is active'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, endpointId, organizationId, ...body }) => {
       const orgId = await resolveOrg(organizationId);
@@ -1018,9 +1018,9 @@ export function registerTools(
     'create_automation',
     'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
     {
-      projectId: z.string(),
-      boardId: z.string(),
-      name: z.string(),
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      name: z.string().describe('Human-readable name'),
       trigger: z.enum([
         'item_created',
         'status_changed',
@@ -1035,14 +1035,14 @@ export function registerTools(
       actions: z
         .array(
           z.object({
-            type: z.string(),
-            config: z.record(z.any()),
+            type: z.string().describe('Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file'),
+            config: z.record(z.any()).describe('Action-specific config, e.g. { url, method, headers, responseMapping } for http_request'),
           }),
         )
         .describe(
           'e.g. [{ type: "http_request", config: { url: "https://api.frankfurter.app/latest?from=USD&to=ILS", method: "GET", responseMapping: [{ path: "rates.ILS", columnId: "<column id from get_board_schema>" }] } }]',
         ),
-      isActive: z.boolean().optional(),
+      isActive: z.boolean().optional().describe('Whether it is active'),
     },
     async ({ projectId, boardId, name, trigger, triggerConfig, actions, isActive }) => {
       // http_request maps response paths onto real column ids. A model that
@@ -1107,9 +1107,9 @@ export function registerTools(
     'get_frontend_prompt',
     'Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.',
     {
-      appId: z.string(),
-      tool: z.enum(['v0', 'bolt', 'lovable', 'cursor', 'claude-code']),
-      organizationId: z.string().optional(),
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      tool: z.enum(['v0', 'bolt', 'lovable', 'cursor', 'claude-code']).describe('Target tool the prompt is written for'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, tool, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
@@ -1295,7 +1295,7 @@ export function registerTools(
     {
       appId: z.string().describe('App UUID or slug (app-xxxxxx) — see list_apps'),
       dir: z.string().describe('Path to the BUILD OUTPUT directory (the one containing index.html), not the project root'),
-      organizationId: z.string().optional(),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, dir, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
@@ -1348,9 +1348,9 @@ export function registerTools(
     'rollback_deployment',
     'Point the live URL back at a previous deployment version (see list_deployments for available versions).',
     {
-      appId: z.string(),
-      version: z.number().int().positive(),
-      organizationId: z.string().optional(),
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      version: z.number().int().positive().describe('Deployment version number (from list_deployments)'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
     async ({ appId, version, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
