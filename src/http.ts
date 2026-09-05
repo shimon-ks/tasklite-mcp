@@ -22,6 +22,15 @@ import { registerTools } from './tools.js';
 import { VERSION } from './version.js';
 import { SERVER_INSTRUCTIONS } from './instructions.js';
 
+// Discovery without a credential: initialize, ping and tools/list carry no
+// data, and directories / catalogs / client "test connection" buttons need
+// them before the user has signed in. Every tools/call still requires auth.
+const DISCOVERY_METHODS = new Set(['initialize', 'ping', 'tools/list', 'notifications/initialized']);
+function isDiscoveryOnly(body: unknown): boolean {
+  const msgs = Array.isArray(body) ? body : [body];
+  return msgs.length > 0 && msgs.every((m) => m && typeof m === 'object' && DISCOVERY_METHODS.has((m as { method?: string }).method ?? ''));
+}
+
 const PORT = Number(process.env.PORT || 8811);
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -70,7 +79,8 @@ const server = http.createServer(async (req, res) => {
 
   const auth = req.headers['authorization'];
   const credential = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  if (!credential) {
+  const body = await readBody(req);
+  if (!credential && !isDiscoveryOnly(body)) {
     // Point clients at the resource metadata so they can start the OAuth flow.
     return sendJson(
       res,
@@ -83,13 +93,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    const body = await readBody(req);
-    const api = new TaskLiteApi(credential);
+    const api = credential ? new TaskLiteApi(credential) : null;
+    const getApi = () => {
+      if (!api) throw new Error('Authentication required: connect with OAuth or pass Authorization: Bearer tl_… to call tools.');
+      return api;
+    };
     const mcp = new McpServer(
       { name: 'tasklite', version: VERSION },
       { instructions: SERVER_INSTRUCTIONS },
     );
-    registerTools(mcp, () => api); // no onboarding tools in hosted mode — auth is the front door
+    registerTools(mcp, getApi); // no onboarding tools in hosted mode — auth is the front door
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => {
       transport.close();

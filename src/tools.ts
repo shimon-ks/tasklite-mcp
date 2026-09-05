@@ -122,6 +122,11 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   create_board: { title: 'Create board', readOnlyHint: false, destructiveHint: false },
   create_column: { title: 'Add column', readOnlyHint: false, destructiveHint: false },
   get_board_schema: { title: 'Read board schema', readOnlyHint: true },
+  update_board: { title: 'Update board', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  delete_board: { title: 'Delete board', readOnlyHint: false, destructiveHint: true },
+  update_column: { title: 'Update column', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  delete_column: { title: 'Delete column', readOnlyHint: false, destructiveHint: true },
+  reorder_columns: { title: 'Reorder columns', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   query_items: { title: 'List items', readOnlyHint: true },
   create_item: { title: 'Create item', readOnlyHint: false, destructiveHint: false },
   update_item: { title: 'Update item', readOnlyHint: false, destructiveHint: false },
@@ -141,9 +146,14 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   update_app_endpoint: { title: 'Update app endpoint', readOnlyHint: false, destructiveHint: false },
   get_app_spec: { title: 'Get app spec', readOnlyHint: true },
   get_frontend_prompt: { title: 'Get frontend prompt', readOnlyHint: true },
+  search: { title: 'Search projects, boards and items', readOnlyHint: true },
+  export_project: { title: 'Export project as JSON', readOnlyHint: true },
+  fetch: { title: 'Fetch one record by id', readOnlyHint: true },
   deploy_frontend: { title: 'Deploy frontend to TaskLite hosting', readOnlyHint: false, destructiveHint: false },
   list_deployments: { title: 'List frontend deployments', readOnlyHint: true },
   rollback_deployment: { title: 'Roll back a frontend deployment', readOnlyHint: false, destructiveHint: false },
+  create_automation: { title: 'Create automation', readOnlyHint: false, destructiveHint: false },
+  list_automations: { title: 'List automations', readOnlyHint: true },
 };
 
 export function registerTools(
@@ -157,7 +167,15 @@ export function registerTools(
     description: string,
     schema: Record<string, unknown>,
     cb: (...args: any[]) => any,
-  ) => server.tool(name, description, schema as any, ANNOTATIONS[name] || {}, cb);
+  ) => {
+    // An empty annotations object is indistinguishable from an empty zod shape
+    // to the SDK's overload parser, which then treats it as the callback and the
+    // tool dies with "typedHandler is not a function". Only pass real annotations.
+    const annotations = ANNOTATIONS[name];
+    return annotations
+      ? server.tool(name, description, schema as any, annotations, cb)
+      : server.tool(name, description, schema as any, cb);
+  };
 
   const resolveOrg = async (organizationId?: string): Promise<string> => {
     if (organizationId) return organizationId;
@@ -506,7 +524,7 @@ export function registerTools(
 
   tool(
     'create_column',
-    'Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override.',
+    'Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.',
     {
       projectId: z.string(),
       boardId: z.string(),
@@ -564,6 +582,112 @@ export function registerTools(
   // ── Group B: data ──────────────────────────────────────────────────────────
 
   tool(
+    'update_board',
+    'Rename a board or change its description. Structure (columns) is changed with update_column / delete_column / reorder_columns.',
+    {
+      projectId: z.string(),
+      boardId: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+    },
+    async ({ projectId, boardId, ...rest }) => {
+      const body = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+      return ok(await getApi().request('PATCH', `/projects/${projectId}/boards/${boardId}`, body));
+    },
+  );
+
+  tool(
+    'delete_board',
+    'Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.',
+    { projectId: z.string(), boardId: z.string() },
+    async ({ projectId, boardId }) => {
+      await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}`);
+      return ok({ deleted: true, boardId });
+    },
+  );
+
+  tool(
+    'update_column',
+    'Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.',
+    {
+      projectId: z.string(),
+      boardId: z.string(),
+      columnId: z.string(),
+      name: z.string().optional(),
+      type: z.string().optional().describe('New column type (same list as create_column)'),
+      settings: z.record(z.unknown()).optional().describe('Replaces the column settings, e.g. { options: [...] } for dropdown/status'),
+      isRequired: z.boolean().optional(),
+      isHidden: z.boolean().optional(),
+      description: z.string().optional(),
+      force: z.boolean().optional().describe('Skip the name/type sanity check'),
+    },
+    async ({ projectId, boardId, columnId, force, ...rest }) => {
+      const body = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+      if (!force && (body.type || body.name)) {
+        // Sanity-check the resulting name/type pair the same way create_column does.
+        const cols = await getApi().request<any>('GET', `/projects/${projectId}/boards/${boardId}/columns`);
+        const list: any[] = Array.isArray(cols) ? cols : (cols?.items ?? cols?.data ?? []);
+        const current = list.find((c) => c.id === columnId);
+        const name = (body.name as string | undefined) ?? current?.name;
+        const type = (body.type as string | undefined) ?? current?.type;
+        if (name && type) {
+          const hint = columnTypeObjection(name, type, body.settings ?? current?.settings);
+          if (hint) return ok(hint);
+        }
+      }
+      return ok(await getApi().request('PATCH', `/projects/${projectId}/boards/${boardId}/columns/${columnId}`, body));
+    },
+  );
+
+  tool(
+    'delete_column',
+    'Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.',
+    { projectId: z.string(), boardId: z.string(), columnId: z.string() },
+    async ({ projectId, boardId, columnId }) => {
+      await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}/columns/${columnId}`);
+      return ok({ deleted: true, columnId });
+    },
+  );
+
+  tool(
+    'reorder_columns',
+    'Set the display order of a board\'s columns. Pass every column id in the wanted order (get_board_schema lists them).',
+    { projectId: z.string(), boardId: z.string(), columnIds: z.array(z.string()).min(1) },
+    async ({ projectId, boardId, columnIds }) => {
+      return ok(await getApi().request('PUT', `/projects/${projectId}/boards/${boardId}/columns/reorder`, { columnIds }));
+    },
+  );
+
+  tool(
+    'export_project',
+    'The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model\'s sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.',
+    {
+      projectId: z.string(),
+      organizationId: z.string().optional().describe('Defaults to the credential organization'),
+      maxItemsPerBoard: z.number().int().positive().max(2000).optional().describe('Default 200'),
+    },
+    async ({ projectId, organizationId, maxItemsPerBoard }) => {
+      const orgId = await resolveOrg(organizationId);
+      const data = await getApi().request<any>('GET', `/organizations/${orgId}/projects/${projectId}/export.json`);
+      const cap = maxItemsPerBoard ?? 200;
+      let truncated = false;
+      for (const b of data?.boards ?? []) {
+        if (Array.isArray(b.items) && b.items.length > cap) {
+          b.items = b.items.slice(0, cap);
+          b.truncated = true;
+          truncated = true;
+        }
+      }
+      return ok({
+        ...data,
+        ...(truncated
+          ? { note: `Some boards were cut to ${cap} items; the REST endpoint returns them all.` }
+          : {}),
+      });
+    },
+  );
+
+  tool(
     'query_items',
     'List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates).',
     {
@@ -596,7 +720,7 @@ export function registerTools(
 
   tool(
     'create_item',
-    'Create an item (row) on a board. cells maps columnId -> value (use get_board_schema for column ids).',
+    'Create an item (row) with all of its data in one call. cells maps columnId -> value (use get_board_schema for column ids); every cell is saved with the row. Use set_cell only for later edits.',
     {
       projectId: z.string(),
       boardId: z.string(),
@@ -892,7 +1016,7 @@ export function registerTools(
 
   tool(
     'create_automation',
-    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook.',
+    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
     {
       projectId: z.string(),
       boardId: z.string(),
@@ -984,7 +1108,7 @@ export function registerTools(
     'Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.',
     {
       appId: z.string(),
-      tool: z.enum(['v0', 'bolt', 'lovable', 'cursor']),
+      tool: z.enum(['v0', 'bolt', 'lovable', 'cursor', 'claude-code']),
       organizationId: z.string().optional(),
     },
     async ({ appId, tool, organizationId }) => {
@@ -995,6 +1119,171 @@ export function registerTools(
           `/organizations/${orgId}/apps/${appId}/spec/prompt/${tool}`,
         ),
       );
+    },
+  );
+
+  // ── Search & fetch — the two tools ChatGPT connectors and deep research require ──
+
+  type SearchHit = {
+    id: string;
+    type: string;
+    title: string;
+    subtitle?: string;
+    highlight?: string;
+    url: string;
+    metadata?: Record<string, unknown>;
+  };
+  type DocRef =
+    | { kind: 'project'; projectId: string }
+    | { kind: 'board'; projectId: string; boardId: string }
+    | { kind: 'item'; projectId: string; boardId: string; itemId: string };
+
+  const parseDocId = (id: string): DocRef => {
+    let m =
+      id.match(/^item:([^:]+):([^:]+):([^:]+)$/) ||
+      id.match(/\/projects\/([^/]+)\/boards\/([^/]+)\/items\/([^/?#]+)/);
+    if (m) return { kind: 'item', projectId: m[1], boardId: m[2], itemId: m[3] };
+    m = id.match(/^board:([^:]+):([^:]+)$/) || id.match(/\/projects\/([^/]+)\/boards\/([^/?#]+)/);
+    if (m) return { kind: 'board', projectId: m[1], boardId: m[2] };
+    m = id.match(/^project:([^:]+)$/) || id.match(/\/projects\/([^/?#]+)/);
+    if (m) return { kind: 'project', projectId: m[1] };
+    throw new Error(
+      `Unrecognized document id "${id}". Use an id returned by search (project:…, board:…:…, item:…:…:…) or an app URL path.`,
+    );
+  };
+  const docId = (d: DocRef): string =>
+    d.kind === 'item'
+      ? `item:${d.projectId}:${d.boardId}:${d.itemId}`
+      : d.kind === 'board'
+        ? `board:${d.projectId}:${d.boardId}`
+        : `project:${d.projectId}`;
+  const docPath = (d: DocRef): string =>
+    d.kind === 'item'
+      ? `/projects/${d.projectId}/boards/${d.boardId}/items/${d.itemId}`
+      : d.kind === 'board'
+        ? `/projects/${d.projectId}/boards/${d.boardId}`
+        : `/projects/${d.projectId}`;
+  // ChatGPT contract: the object as structuredContent AND JSON-encoded in content.
+  const structured = (doc: Record<string, unknown>) => {
+    const clean = sanitizeUsersDeep(doc) as Record<string, unknown>;
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(clean) }],
+      structuredContent: clean,
+    };
+  };
+
+  tool(
+    'search',
+    'Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.',
+    {
+      query: z.string().min(1).max(100).describe('Search text'),
+      projectId: z.string().optional().describe('Limit the search to one project'),
+      limit: z.number().int().positive().max(50).optional().describe('Max results, default 20'),
+    },
+    async ({ query, projectId, limit }) => {
+      const qs = new URLSearchParams({ q: query, types: 'item,project,board', limit: String(limit ?? 20) });
+      if (projectId) qs.set('projectId', projectId);
+      const res = await getApi().request<{ results?: SearchHit[] }>('GET', `/search?${qs.toString()}`);
+      const results: Record<string, unknown>[] = [];
+      for (const r of res?.results ?? []) {
+        let ref: DocRef;
+        try {
+          ref = parseDocId(r.url);
+        } catch {
+          continue; // users and anything else without a project path
+        }
+        results.push({
+          id: docId(ref),
+          title: r.title,
+          url: getApi().appUrl(r.url),
+          type: ref.kind,
+          ...(r.subtitle ? { subtitle: r.subtitle } : {}),
+          ...(r.highlight ? { snippet: r.highlight } : {}),
+        });
+      }
+      return structured({ results });
+    },
+  );
+
+  tool(
+    'fetch',
+    'One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.',
+    {
+      id: z.string().describe('An id from search, or an app URL path such as /projects/…/boards/…/items/…'),
+      organizationId: z.string().optional().describe('Only needed for project ids when the credential has no default organization; otherwise resolved automatically'),
+    },
+    async ({ id, organizationId }) => {
+      const ref = parseDocId(id);
+      const api = getApi();
+      const url = api.appUrl(docPath(ref));
+      if (ref.kind === 'item') {
+        const item = await api.request<any>('GET', docPath(ref));
+        return structured({
+          id: docId(ref),
+          title: item?.title ?? item?.name ?? ref.itemId,
+          text: JSON.stringify(sanitizeUsersDeep(item), null, 2),
+          url,
+          metadata: { type: 'item', projectId: ref.projectId, boardId: ref.boardId },
+        });
+      }
+      if (ref.kind === 'board') {
+        const [board, columns] = await Promise.all([
+          api.request<any>('GET', docPath(ref)),
+          api.request<any>('GET', `${docPath(ref)}/columns`),
+        ]);
+        return structured({
+          id: docId(ref),
+          title: board?.name ?? ref.boardId,
+          text: JSON.stringify(sanitizeUsersDeep({ board, columns }), null, 2),
+          url,
+          metadata: {
+            type: 'board',
+            projectId: ref.projectId,
+            columnCount: Array.isArray(columns) ? columns.length : undefined,
+          },
+        });
+      }
+      // The project record lives under its organization; boards do not.
+      const loadProject = async (): Promise<unknown> => {
+        let orgId: string | null = organizationId ?? null;
+        if (!orgId) {
+          try {
+            orgId = await resolveOrg();
+          } catch {
+            orgId = null;
+          }
+        }
+        const candidates: string[] = orgId ? [orgId] : [];
+        if (!orgId) {
+          const orgs = await api.request<any>('GET', '/organizations');
+          for (const o of Array.isArray(orgs) ? orgs : (orgs?.items ?? [])) {
+            if (o?.id) candidates.push(o.id);
+          }
+        }
+        let lastErr: unknown = null;
+        for (const c of candidates) {
+          try {
+            return await api.request<any>('GET', `/organizations/${c}/projects/${ref.projectId}`);
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        throw lastErr ?? new Error(`Project ${ref.projectId} not found in any organization`);
+      };
+      const [project, boards] = await Promise.all([
+        loadProject() as Promise<any>,
+        api.request<any>('GET', `${docPath(ref)}/boards`),
+      ]);
+      const boardList: unknown[] = Array.isArray(boards)
+        ? boards
+        : ((boards as any)?.items ?? (boards as any)?.data ?? []);
+      return structured({
+        id: docId(ref),
+        title: project?.name ?? ref.projectId,
+        text: JSON.stringify(sanitizeUsersDeep({ project, boards: boardList }), null, 2),
+        url,
+        metadata: { type: 'project', boardCount: boardList.length },
+      });
     },
   );
 

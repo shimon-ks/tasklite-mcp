@@ -23,3 +23,6 @@ legal/
 .env.*
 *.pem
 credentials.json
+
+# Operational checklist with server commands — local only
+REGISTRIES.md
