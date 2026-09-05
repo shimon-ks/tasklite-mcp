@@ -25,7 +25,14 @@ import { SERVER_INSTRUCTIONS } from './instructions.js';
 // Discovery without a credential: initialize, ping and tools/list carry no
 // data, and directories / catalogs / client "test connection" buttons need
 // them before the user has signed in. Every tools/call still requires auth.
-const DISCOVERY_METHODS = new Set(['initialize', 'ping', 'tools/list', 'notifications/initialized']);
+const DISCOVERY_METHODS = new Set([
+  'initialize',
+  'ping',
+  'tools/list',
+  'resources/list',
+  'prompts/list',
+  'notifications/initialized',
+]);
 function isDiscoveryOnly(body: unknown): boolean {
   const msgs = Array.isArray(body) ? body : [body];
   return msgs.length > 0 && msgs.every((m) => m && typeof m === 'object' && DISCOVERY_METHODS.has((m as { method?: string }).method ?? ''));

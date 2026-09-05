@@ -3,6 +3,11 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## Unreleased
+
+### Fixed
+- Hosted server: `resources/list` and `prompts/list` join the discovery methods that work without a credential (directory scanners logged them as failures).
+
 ## 0.7.0 — 2026-09-04
 
 Requires TaskLite API from 2026-09-04 (branch `feat/app-api-hardening`) for
