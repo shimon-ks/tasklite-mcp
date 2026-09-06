@@ -3,6 +3,18 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.8.3 — 2026-09-06
+
+### Changed
+- `build_backend` no longer cares about the order of boards in the spec.
+  Sample rows are created in dependency order — a board's rows after the
+  rows of every board it links to — so an order that names a customer
+  works whether Customers is listed first or last.
+- A sample row that links to a title not present in the related board's
+  rows is refused before anything is created, with the board and the
+  missing title named. Previously the project was built and the gap was
+  only mentioned in a note.
+
 ## 0.8.2 — 2026-09-06
 
 ### Changed

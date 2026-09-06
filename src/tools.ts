@@ -1109,11 +1109,11 @@ export function registerTools(
             rows: z
               .array(z.record(z.any()))
               .optional()
-              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title, otherwise the first text value is used. A relation cell takes the title(s) of rows in the related board — list the related board earlier in the spec so its rows exist first.'),
+              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title, otherwise the first text value is used. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order).'),
           }),
         )
         .min(1)
-        .describe('The boards (tables) of the backend, in dependency order: a board whose rows are referenced comes before the boards that reference it'),
+        .describe('The boards (tables) of the backend, in any order'),
       api: z
         .object({
           name: z.string().optional().describe('App name; defaults to "<project> API"'),
@@ -1144,6 +1144,40 @@ export function registerTools(
             }
           } else if (c.relatedBoard || c.relationType) {
             problems.push(`${b.name}.${c.name}: relatedBoard/relationType only apply to type "relation" (got ${c.type})`);
+          }
+        }
+      }
+      // Sample rows that link to other boards: the referenced row must be in
+      // the spec (its title, or its first text value). Checked here so a typo
+      // is refused before anything is built rather than reported as a note.
+      const specTitles = new Map<string, Set<string>>();
+      for (const b of boards) {
+        const titles = new Set<string>();
+        for (const row of b.rows || []) {
+          const cols = b.columns;
+          let title = typeof row.title === 'string' ? row.title : '';
+          if (!title) {
+            for (const [k, v] of Object.entries(row)) {
+              const col = cols.find((c: { name: string }) => c.name.toLowerCase() === k.toLowerCase());
+              if (col && col.type !== 'relation' && typeof v === 'string') { title = v; break; }
+            }
+          }
+          if (title) titles.add(title.toLowerCase());
+        }
+        specTitles.set(b.name.toLowerCase(), titles);
+      }
+      for (const b of boards) {
+        for (const row of b.rows || []) {
+          for (const [k, v] of Object.entries(row)) {
+            const col = b.columns.find((c: { name: string }) => c.name.toLowerCase() === k.toLowerCase());
+            if (!col || col.type !== 'relation') continue;
+            const target = String(col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? '').toLowerCase();
+            const have = specTitles.get(target) || new Set<string>();
+            for (const want of (Array.isArray(v) ? v : [v]).map(String)) {
+              if (!have.has(want.toLowerCase())) {
+                problems.push(`${b.name} row "${String(row.title ?? '')}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${col.relatedBoard ?? (col.settings as any)?.relatedBoardName}`);
+              }
+            }
           }
         }
       }
@@ -1220,9 +1254,26 @@ export function registerTools(
           }
         }
 
-        // 3. rows, in spec order; relation cells resolve titles of rows already created
+        // 3. rows, in dependency order: a board's rows after the rows of every
+        // board it links to, whatever order the spec listed them in. A cycle
+        // (A links B, B links A) falls back to spec order for what remains.
+        const depsOf = (b: (typeof boards)[number]): string[] =>
+          b.columns
+            .filter((c: { type: string }) => c.type === 'relation')
+            .map((c: { relatedBoard?: string; settings?: Record<string, unknown> }) => String(c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? '').toLowerCase())
+            .filter((n: string) => n && n !== b.name.toLowerCase());
+        const rowOrder: number[] = [];
+        const done = new Set<string>();
+        let remaining = boards.map((_, i) => i);
+        while (remaining.length) {
+          const ready = remaining.filter((i) => depsOf(boards[i]).every((d) => done.has(d)));
+          const next = ready.length ? ready : [remaining[0]];
+          for (const i of next) { rowOrder.push(i); done.add(boards[i].name.toLowerCase()); }
+          remaining = remaining.filter((i) => !next.includes(i));
+        }
         const itemIdByBoardTitle = new Map<string, Map<string, string>>();
-        for (const [bi, b] of boards.entries()) {
+        for (const bi of rowOrder) {
+          const b = boards[bi];
           if (!b.rows?.length) continue;
           const built = outBoards[bi];
           const byName = new Map(built.columns.map((c) => [c.name.toLowerCase(), c]));
@@ -1243,7 +1294,7 @@ export function registerTools(
                 const lookup = itemIdByBoardTitle.get(col.relatedBoardId) || new Map<string, string>();
                 const ids = wanted.map((t) => lookup.get(t.toLowerCase())).filter((x): x is string => Boolean(x));
                 if (ids.length < wanted.length) {
-                  notes.push(`${b.name}: relation "${col.name}" could not find ${wanted.length - ids.length} of ${wanted.length} referenced rows by title (put the related board and its rows earlier in the spec)`);
+                  notes.push(`${b.name}: relation "${col.name}" could not find ${wanted.length - ids.length} of ${wanted.length} referenced rows by title`);
                 }
                 if (ids.length) cells[col.id] = { relatedItemIds: ids };
                 continue;
