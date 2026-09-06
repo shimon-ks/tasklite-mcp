@@ -1170,7 +1170,17 @@ export function registerTools(
         for (const row of b.rows || []) {
           for (const [k, v] of Object.entries(row)) {
             const col = b.columns.find((c: { name: string }) => c.name.toLowerCase() === k.toLowerCase());
-            if (!col || col.type !== 'relation') continue;
+            if (!col) continue;
+            if ((col.type === 'dropdown' || col.type === 'status' || col.type === 'priority') && col.options?.length && typeof v === 'string' && !col.options.includes(v)) {
+              problems.push(`${b.name} row "${String(row.title ?? '')}": "${col.name}" = "${v}" is not one of its options (${col.options.join(', ')})`);
+              continue;
+            }
+            if (col.type !== 'relation') continue;
+            const rt = col.relationType ?? (col.settings as any)?.relationType;
+            if ((rt === 'many_to_one' || rt === 'one_to_one') && Array.isArray(v) && v.length > 1) {
+              problems.push(`${b.name} row "${String(row.title ?? '')}": relation "${col.name}" is ${rt}, so it takes one title, not ${v.length}`);
+              continue;
+            }
             const target = String(col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? '').toLowerCase();
             const have = specTitles.get(target) || new Set<string>();
             for (const want of (Array.isArray(v) ? v : [v]).map(String)) {
@@ -1264,12 +1274,12 @@ export function registerTools(
             .filter((n: string) => n && n !== b.name.toLowerCase());
         const rowOrder: number[] = [];
         const done = new Set<string>();
-        let remaining = boards.map((_, i) => i);
+        let remaining = boards.map((_: unknown, i: number) => i);
         while (remaining.length) {
-          const ready = remaining.filter((i) => depsOf(boards[i]).every((d) => done.has(d)));
+          const ready = remaining.filter((i: number) => depsOf(boards[i]).every((d: string) => done.has(d)));
           const next = ready.length ? ready : [remaining[0]];
           for (const i of next) { rowOrder.push(i); done.add(boards[i].name.toLowerCase()); }
-          remaining = remaining.filter((i) => !next.includes(i));
+          remaining = remaining.filter((i: number) => !next.includes(i));
         }
         const itemIdByBoardTitle = new Map<string, Map<string, string>>();
         for (const bi of rowOrder) {
