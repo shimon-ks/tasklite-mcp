@@ -3,7 +3,7 @@
   "name": "net.tasklite/mcp",
   "title": "TaskLite",
   "description": "Build a real backend from Claude: boards, data, REST APIs and a ready-made admin UI",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "websiteUrl": "https://tasklite.net/docs",
   "remotes": [
     {
@@ -15,7 +15,7 @@
     {
       "registryType": "npm",
       "identifier": "@tasklite/mcp",
-      "version": "0.8.3",
+      "version": "0.9.0",
       "transport": {
         "type": "stdio"
       }

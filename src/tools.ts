@@ -514,17 +514,19 @@ export function registerTools(
 
   tool(
     'create_board',
-    'Create a board (a data table) inside a project. Add typed columns with create_column afterwards.',
+    'Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: "tasks" (default) also gives the board the built-in task columns — status, priority, assignee, due date, tags — for work people track; "data" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).',
     {
       projectId: z.string().describe('Project id (from list_projects / create_project)'),
       name: z.string().describe('Human-readable name'),
       description: z.string().optional().describe('Free-text description'),
+      kind: z.enum(['tasks', 'data']).optional().describe('"tasks": with the built-in task columns (status, priority, assignee, due date, tags). "data": only the columns you add. Default tasks.'),
     },
-    async ({ projectId, name, description }) => {
+    async ({ projectId, name, description, kind }) => {
       const board = await getApi().request<any>('POST', `/projects/${projectId}/boards`, {
         name,
         projectId,
         ...(description ? { description } : {}),
+        ...(kind ? { kind } : {}),
       });
       return ok({ board, adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${board.id}`) });
     },
@@ -1074,7 +1076,7 @@ export function registerTools(
 
   tool(
     'build_backend',
-    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
+    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind "data": only the columns you define, no task fields); set kind "tasks" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.',
     {
       project: z
         .object({
@@ -1087,6 +1089,7 @@ export function registerTools(
           z.object({
             name: z.string().describe('Board (table) name, e.g. "Repair Orders"'),
             description: z.string().optional().describe('One line on what a row is'),
+            kind: z.enum(['tasks', 'data']).optional().describe('"data" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. "tasks": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do.'),
             columns: z
               .array(
                 z.object({
@@ -1203,22 +1206,25 @@ export function registerTools(
       });
       try {
         type Col = { id: string; name: string; type: string; alias: string; relatedBoardId?: string; relationType?: string };
-        type Built = { id: string; name: string; slug: string; columns: Col[]; rows: number; adminUrl: string };
+        type Built = { id: string; name: string; kind: string; slug: string; columns: Col[]; rows: number; adminUrl: string };
         const outBoards: Built[] = [];
         const boardIdByName = new Map<string, string>();
         const usedSlugs = new Set<string>();
 
         // 1. boards first, so relation columns can point at any of them
         for (const [bi, b] of boards.entries()) {
+          const kind = b.kind || 'data';
           const board = await client.request<any>('POST', `/projects/${created.id}/boards`, {
             name: b.name,
             projectId: created.id,
+            kind,
             ...(b.description ? { description: b.description } : {}),
           });
           boardIdByName.set(b.name.toLowerCase(), board.id);
           outBoards.push({
             id: board.id,
             name: b.name,
+            kind,
             slug: toSlug(b.name, bi, usedSlugs),
             columns: [],
             rows: 0,

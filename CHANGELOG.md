@@ -3,6 +3,23 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.9.0 — 2026-09-06
+
+Requires a TaskLite server from 2026-09-06 for the new behaviour; older
+servers ignore `kind` and keep creating task boards.
+
+### Added
+- Data boards. `create_board` takes `kind`: `"tasks"` (default) also gives
+  the board the built-in task columns — status, priority, assignee, due
+  date, tags; `"data"` creates a plain table with only the columns you add.
+  `build_backend` boards default to `"data"`: a backend's tables are
+  customers, orders and payments, not to-dos. Rows of a data board come
+  back from the App API without `status` and `priority`, and its OpenAPI
+  document does not list them.
+- Relation values from the App API now always carry
+  `relatedItems: [{ id, title }]` next to `relatedItemIds`, whoever wrote
+  the row, so a frontend shows "Sam Miller" without a second request.
+
 ## 0.8.3 — 2026-09-06
 
 ### Changed
