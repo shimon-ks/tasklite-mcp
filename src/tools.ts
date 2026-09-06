@@ -1796,9 +1796,14 @@ export function registerTools(
         'frontend.zip',
         buffer,
       );
+      // The server's `published` means "this deploy is the one that published
+      // the app" — false whenever it was already published. Next to "Live
+      // now" that read as a contradiction, so say what actually happened.
+      const { published: publishedByThisDeploy, ...rest } = result;
       return ok({
-        ...result,
-        note: 'Live now. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.',
+        ...rest,
+        appPublished: true,
+        note: `Live now${publishedByThisDeploy ? ' (this deploy also published the app)' : ''}. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.`,
       });
     },
   );
