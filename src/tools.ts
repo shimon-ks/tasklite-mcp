@@ -1074,7 +1074,7 @@ export function registerTools(
 
   tool(
     'build_backend',
-    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns, optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices, relation for links between boards), choose which board gets which fields — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
+    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column whose settings.relatedBoardName names another board in the same spec — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
     {
       project: z
         .object({
@@ -1095,7 +1095,7 @@ export function registerTools(
                   options: z.array(z.string()).optional().describe('The closed choices for dropdown/status/priority, e.g. ["Received","In Repair","Ready","Completed"]'),
                   required: z.boolean().optional().describe('Reject API creates that leave it blank'),
                   validation: z.record(z.any()).optional().describe('{ unique, min, max, minLength, maxLength, pattern, patternMessage }'),
-                  settings: z.record(z.any()).optional().describe('Other type settings, e.g. { currency: "ILS" } or { relatedBoardName } for relation'),
+                  settings: z.record(z.any()).optional().describe('Other type settings. relation: { relatedBoardName: "<a board in this spec>", relationType?: "many_to_many" | "one_to_many" | "many_to_one" | "one_to_one" }. currency: { currency: "ILS" }.'),
                   alias: z.string().optional().describe('API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)'),
                 }),
               )
@@ -1104,11 +1104,11 @@ export function registerTools(
             rows: z
               .array(z.record(z.any()))
               .optional()
-              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]; "title" sets the row title, otherwise the first text value is used'),
+              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title, otherwise the first text value is used. A relation cell takes the title(s) of rows in the related board — list the related board earlier in the spec so its rows exist first.'),
           }),
         )
         .min(1)
-        .describe('The boards (tables) of the backend'),
+        .describe('The boards (tables) of the backend, in dependency order: a board whose rows are referenced comes before the boards that reference it'),
       api: z
         .object({
           name: z.string().optional().describe('App name; defaults to "<project> API"'),
@@ -1123,6 +1123,7 @@ export function registerTools(
       // Validate the whole spec before creating anything: a half-built project
       // after a spec error is worse than a clear refusal.
       const problems: string[] = [];
+      const boardNames = new Set(boards.map((b: { name: string }) => b.name.toLowerCase()));
       for (const b of boards) {
         for (const c of b.columns) {
           if ((c.type === 'dropdown' || c.type === 'status' || c.type === 'priority') && !c.options?.length && !(c.settings as any)?.options) {
@@ -1130,6 +1131,12 @@ export function registerTools(
           }
           if (c.alias && RESERVED_ALIASES.has(c.alias.toLowerCase())) {
             problems.push(`${b.name}.${c.name}: alias "${c.alias}" is a reserved item field`);
+          }
+          if (c.type === 'relation') {
+            const target = String((c.settings as any)?.relatedBoardName ?? '').toLowerCase();
+            if (!target || !boardNames.has(target)) {
+              problems.push(`${b.name}.${c.name}: relation needs settings.relatedBoardName naming a board in this spec (have: ${boards.map((x: { name: string }) => x.name).join(', ')})`);
+            }
           }
         }
       }
@@ -1144,21 +1151,47 @@ export function registerTools(
         ...(project.description ? { description: project.description } : {}),
       });
       try {
-        const outBoards: Array<{ id: string; name: string; slug: string; columns: Array<{ id: string; name: string; type: string; alias: string }>; rows: number; adminUrl: string }> = [];
+        type Col = { id: string; name: string; type: string; alias: string; relatedBoardId?: string };
+        type Built = { id: string; name: string; slug: string; columns: Col[]; rows: number; adminUrl: string };
+        const outBoards: Built[] = [];
+        const boardIdByName = new Map<string, string>();
         const usedSlugs = new Set<string>();
+
+        // 1. boards first, so relation columns can point at any of them
         for (const [bi, b] of boards.entries()) {
           const board = await client.request<any>('POST', `/projects/${created.id}/boards`, {
             name: b.name,
             projectId: created.id,
             ...(b.description ? { description: b.description } : {}),
           });
+          boardIdByName.set(b.name.toLowerCase(), board.id);
+          outBoards.push({
+            id: board.id,
+            name: b.name,
+            slug: toSlug(b.name, bi, usedSlugs),
+            columns: [],
+            rows: 0,
+            adminUrl: client.appUrl(`/projects/${created.id}/boards/${board.id}`),
+          });
+        }
+
+        // 2. columns
+        for (const [bi, b] of boards.entries()) {
+          const built = outBoards[bi];
           const usedAliases = new Set<string>();
-          const cols: Array<{ id: string; name: string; type: string; alias: string }> = [];
           for (const [ci, c] of b.columns.entries()) {
             let type = c.type;
             const settings: Record<string, unknown> = { ...(c.settings || {}) };
             if (c.options?.length) settings.options = c.options;
             if (c.validation) settings.validation = c.validation;
+            let relatedBoardId: string | undefined;
+            if (type === 'relation') {
+              relatedBoardId = boardIdByName.get(String(settings.relatedBoardName).toLowerCase());
+              delete settings.relatedBoardName;
+              settings.relatedBoardId = relatedBoardId;
+              settings.projectId = created.id;
+              if (!settings.relationType) settings.relationType = 'many_to_many';
+            }
             const objection = columnTypeObjection(c.name, type, settings);
             if (objection && objection.suggestedType !== type) {
               notes.push(`${b.name}.${c.name}: created as ${objection.suggestedType} rather than ${type}, because the name says so`);
@@ -1166,7 +1199,7 @@ export function registerTools(
             }
             const column = await client.request<any>(
               'POST',
-              `/projects/${created.id}/boards/${board.id}/columns`,
+              `/projects/${created.id}/boards/${built.id}/columns`,
               {
                 name: c.name,
                 type,
@@ -1176,39 +1209,48 @@ export function registerTools(
             );
             const alias = c.alias || toAlias(c.name, ci, usedAliases);
             if (c.alias) usedAliases.add(c.alias.toLowerCase());
-            cols.push({ id: column.id, name: c.name, type, alias });
+            built.columns.push({ id: column.id, name: c.name, type, alias, ...(relatedBoardId ? { relatedBoardId } : {}) });
           }
-          let rowCount = 0;
-          if (b.rows?.length) {
-            const byName = new Map(cols.map((c) => [c.name.toLowerCase(), c]));
-            for (const row of b.rows) {
-              const cells: Record<string, unknown> = {};
-              let title = typeof row.title === 'string' ? row.title : '';
-              for (const [k, v] of Object.entries(row)) {
-                if (k === 'title') continue;
-                const col = byName.get(k.toLowerCase());
-                if (!col) {
-                  notes.push(`${b.name}: row field "${k}" matches no column and was skipped`);
-                  continue;
-                }
-                cells[col.id] = v;
-                if (!title && typeof v === 'string') title = v;
+        }
+
+        // 3. rows, in spec order; relation cells resolve titles of rows already created
+        const itemIdByBoardTitle = new Map<string, Map<string, string>>();
+        for (const [bi, b] of boards.entries()) {
+          if (!b.rows?.length) continue;
+          const built = outBoards[bi];
+          const byName = new Map(built.columns.map((c) => [c.name.toLowerCase(), c]));
+          const titles = new Map<string, string>();
+          itemIdByBoardTitle.set(built.id, titles);
+          for (const row of b.rows) {
+            const cells: Record<string, unknown> = {};
+            let title = typeof row.title === 'string' ? row.title : '';
+            for (const [k, v] of Object.entries(row)) {
+              if (k === 'title') continue;
+              const col = byName.get(k.toLowerCase());
+              if (!col) {
+                notes.push(`${b.name}: row field "${k}" matches no column and was skipped`);
+                continue;
               }
-              await client.request('POST', `/projects/${created.id}/boards/${board.id}/items`, {
-                title: title || `${b.name} ${rowCount + 1}`,
-                cells,
-              });
-              rowCount++;
+              if (col.type === 'relation' && col.relatedBoardId && (typeof v === 'string' || Array.isArray(v))) {
+                const wanted = (Array.isArray(v) ? v : [v]).map(String);
+                const lookup = itemIdByBoardTitle.get(col.relatedBoardId) || new Map<string, string>();
+                const ids = wanted.map((t) => lookup.get(t.toLowerCase())).filter((x): x is string => Boolean(x));
+                if (ids.length < wanted.length) {
+                  notes.push(`${b.name}: relation "${col.name}" could not find ${wanted.length - ids.length} of ${wanted.length} referenced rows by title (put the related board and its rows earlier in the spec)`);
+                }
+                if (ids.length) cells[col.id] = { relatedItemIds: ids };
+                continue;
+              }
+              cells[col.id] = v;
+              if (!title && typeof v === 'string') title = v;
             }
+            const item = await client.request<any>('POST', `/projects/${created.id}/boards/${built.id}/items`, {
+              title: title || `${b.name} ${built.rows + 1}`,
+              cells,
+            });
+            if (item?.id) titles.set(String(item.title ?? title).toLowerCase(), item.id);
+            built.rows++;
           }
-          outBoards.push({
-            id: board.id,
-            name: b.name,
-            slug: toSlug(b.name, bi, usedSlugs),
-            columns: cols,
-            rows: rowCount,
-            adminUrl: client.appUrl(`/projects/${created.id}/boards/${board.id}`),
-          });
         }
 
         let apiOut: Record<string, unknown> | undefined;
@@ -1237,9 +1279,10 @@ export function registerTools(
             });
           }
           const writes = methods.some((m: string) => m !== 'GET');
+          const scopes = writes ? ['read', 'write'] : ['read'];
           const key = await client.request<any>('POST', `/organizations/${orgId}/apps/${app.id}/api-keys`, {
             name: 'frontend',
-            scopes: writes ? ['read', 'write'] : ['read'],
+            scopes,
           });
           apiOut = {
             appId: app.id,
@@ -1248,8 +1291,9 @@ export function registerTools(
             openapi: `${client.apiUrl}/apps/${app.slug}/api/openapi.json`,
             endpoints,
             apiKey: key.rawKey,
+            scopes,
             keyRule:
-              'Keep the key server-side (env var, API route); send it as Authorization: Bearer <key>.' +
+              'This is the only time the key is shown. Keep it server-side (env var, API route); send it as Authorization: Bearer <key>.' +
               (api.rowLevelSecurity ? ' Row-level security is on: also send X-App-User: <your user id> on every call.' : ''),
             adminUrl: client.appUrl(`/apps/${app.id}`),
           };
@@ -1258,7 +1302,13 @@ export function registerTools(
         return ok({
           built: true,
           project: { id: created.id, name: project.name, adminUrl: client.appUrl(`/projects/${created.id}`) },
-          boards: outBoards.map(({ slug, ...b }) => (api ? { ...b, endpoint: slug } : b)),
+          boards: outBoards.map(({ slug, columns, ...b }) => ({
+            ...b,
+            ...(api ? { endpoint: slug } : {}),
+            columns: columns.map(({ relatedBoardId, ...c }) =>
+              relatedBoardId ? { ...c, relatedBoard: outBoards.find((x) => x.id === relatedBoardId)?.name } : c,
+            ),
+          })),
           ...(apiOut ? { api: apiOut } : {}),
           ...(notes.length ? { notes } : {}),
         });

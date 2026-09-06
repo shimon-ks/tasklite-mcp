@@ -3,6 +3,21 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.8.1 — 2026-09-06
+
+### Added
+- `build_backend` links boards: a `relation` column with
+  `settings.relatedBoardName` naming another board in the same spec is
+  wired to it (relation type defaults to many_to_many). Sample rows can
+  fill a relation cell with the title(s) of rows in the related board, so
+  "Customer": "Sam Miller" on an order links to that customer. Boards are
+  created before any column, so order in the spec only matters for rows.
+- The API summary echoes `scopes`, and says the key is shown once.
+
+### Changed
+- A relation to a board not in the spec is refused before anything is
+  created, with the list of boards that are.
+
 ## 0.8.0 — 2026-09-06
 
 ### Added
