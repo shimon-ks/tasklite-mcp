@@ -1074,7 +1074,7 @@ export function registerTools(
 
   tool(
     'build_backend',
-    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column whose settings.relatedBoardName names another board in the same spec — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
+    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
     {
       project: z
         .object({
@@ -1095,7 +1095,12 @@ export function registerTools(
                   options: z.array(z.string()).optional().describe('The closed choices for dropdown/status/priority, e.g. ["Received","In Repair","Ready","Completed"]'),
                   required: z.boolean().optional().describe('Reject API creates that leave it blank'),
                   validation: z.record(z.any()).optional().describe('{ unique, min, max, minLength, maxLength, pattern, patternMessage }'),
-                  settings: z.record(z.any()).optional().describe('Other type settings. relation: { relatedBoardName: "<a board in this spec>", relationType?: "many_to_many" | "one_to_many" | "many_to_one" | "one_to_one" }. currency: { currency: "ILS" }.'),
+                  relatedBoard: z.string().optional().describe('relation columns only: the name of another board in this spec that this column links to, e.g. "Customers"'),
+                  relationType: z
+                    .enum(['many_to_one', 'one_to_many', 'many_to_many', 'one_to_one'])
+                    .optional()
+                    .describe('relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it.'),
+                  settings: z.record(z.any()).optional().describe('Other type settings, e.g. { currency: "ILS" }. (relatedBoardName / relationType are also accepted here for compatibility.)'),
                   alias: z.string().optional().describe('API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)'),
                 }),
               )
@@ -1133,10 +1138,12 @@ export function registerTools(
             problems.push(`${b.name}.${c.name}: alias "${c.alias}" is a reserved item field`);
           }
           if (c.type === 'relation') {
-            const target = String((c.settings as any)?.relatedBoardName ?? '').toLowerCase();
+            const target = String(c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? '').toLowerCase();
             if (!target || !boardNames.has(target)) {
-              problems.push(`${b.name}.${c.name}: relation needs settings.relatedBoardName naming a board in this spec (have: ${boards.map((x: { name: string }) => x.name).join(', ')})`);
+              problems.push(`${b.name}.${c.name}: relation needs relatedBoard naming a board in this spec (have: ${boards.map((x: { name: string }) => x.name).join(', ')})`);
             }
+          } else if (c.relatedBoard || c.relationType) {
+            problems.push(`${b.name}.${c.name}: relatedBoard/relationType only apply to type "relation" (got ${c.type})`);
           }
         }
       }
@@ -1151,7 +1158,7 @@ export function registerTools(
         ...(project.description ? { description: project.description } : {}),
       });
       try {
-        type Col = { id: string; name: string; type: string; alias: string; relatedBoardId?: string };
+        type Col = { id: string; name: string; type: string; alias: string; relatedBoardId?: string; relationType?: string };
         type Built = { id: string; name: string; slug: string; columns: Col[]; rows: number; adminUrl: string };
         const outBoards: Built[] = [];
         const boardIdByName = new Map<string, string>();
@@ -1186,11 +1193,11 @@ export function registerTools(
             if (c.validation) settings.validation = c.validation;
             let relatedBoardId: string | undefined;
             if (type === 'relation') {
-              relatedBoardId = boardIdByName.get(String(settings.relatedBoardName).toLowerCase());
+              relatedBoardId = boardIdByName.get(String(c.relatedBoard ?? settings.relatedBoardName).toLowerCase());
               delete settings.relatedBoardName;
               settings.relatedBoardId = relatedBoardId;
               settings.projectId = created.id;
-              if (!settings.relationType) settings.relationType = 'many_to_many';
+              settings.relationType = c.relationType || settings.relationType || 'many_to_many';
             }
             const objection = columnTypeObjection(c.name, type, settings);
             if (objection && objection.suggestedType !== type) {
@@ -1209,7 +1216,7 @@ export function registerTools(
             );
             const alias = c.alias || toAlias(c.name, ci, usedAliases);
             if (c.alias) usedAliases.add(c.alias.toLowerCase());
-            built.columns.push({ id: column.id, name: c.name, type, alias, ...(relatedBoardId ? { relatedBoardId } : {}) });
+            built.columns.push({ id: column.id, name: c.name, type, alias, ...(relatedBoardId ? { relatedBoardId, relationType: String(settings.relationType) } : {}) });
           }
         }
 
@@ -1305,8 +1312,8 @@ export function registerTools(
           boards: outBoards.map(({ slug, columns, ...b }) => ({
             ...b,
             ...(api ? { endpoint: slug } : {}),
-            columns: columns.map(({ relatedBoardId, ...c }) =>
-              relatedBoardId ? { ...c, relatedBoard: outBoards.find((x) => x.id === relatedBoardId)?.name } : c,
+            columns: columns.map(({ relatedBoardId, relationType, ...c }) =>
+              relatedBoardId ? { ...c, relatedBoard: outBoards.find((x) => x.id === relatedBoardId)?.name, relationType } : c,
             ),
           })),
           ...(apiOut ? { api: apiOut } : {}),

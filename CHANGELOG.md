@@ -3,6 +3,18 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.8.2 — 2026-09-06
+
+### Changed
+- `build_backend` relation columns take `relatedBoard` and `relationType`
+  as fields of their own, and `relationType` is an enum
+  (`many_to_one`, `one_to_many`, `many_to_many`, `one_to_one`) with a
+  description that says what each means for a business model. A model
+  reading the schema now sees the valid values instead of guessing; the
+  previous `settings.relatedBoardName` form still works. The summary echoes
+  the relation type of every relation column. Using either field on a
+  non-relation column is refused before anything is built.
+
 ## 0.8.1 — 2026-09-06
 
 ### Added
