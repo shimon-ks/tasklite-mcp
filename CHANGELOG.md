@@ -3,6 +3,30 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.8.0 — 2026-09-06
+
+### Added
+- `build_backend` — one call builds a project, its boards, typed columns,
+  optional sample rows, and optionally a published REST API with an endpoint
+  per board and a server-side key. The model designs the schema; the tool
+  executes it and returns one compact summary. API field names are derived
+  from column names and never collide with reserved item fields, so nothing
+  needs a retry. A spec problem is reported before anything is created.
+- `create_app_api_key` accepts `scopes` (`["read"]` or `["read","write"]`).
+  With a server from 2026-09-06 the default follows the app: write once any
+  endpoint accepts POST, PATCH or DELETE. Earlier keys said `read` while
+  writing, which was a label, not a restriction.
+
+### Changed
+- Organization defaulting for OAuth users (ChatGPT, Claude web): the single
+  organization the user can write to is chosen automatically; with several,
+  the error names them with ids so the model can choose in the same turn.
+  Previously every OAuth call without `organizationId` failed and asked for
+  `list_organizations` first.
+- `create_app_endpoint` / `update_app_endpoint` spell out the reserved alias
+  names (`status`, `title`, …) so a model never trips on them.
+- Tool count 44 → 45; hosted 39 → 40.
+
 ## 0.7.1 — 2026-09-06
 
 ### Changed

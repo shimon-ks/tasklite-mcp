@@ -76,6 +76,13 @@ interface Session {
   organizationId: string | null;
 }
 
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  userRole: string | null;
+  hasValidSubscription: boolean;
+}
+
 export class TaskLiteApi {
   private session: Session | null = null;
 
@@ -118,12 +125,41 @@ export class TaskLiteApi {
     return this.session.token;
   }
 
+  private orgCache: OrganizationSummary[] | null = null;
+
+  /**
+   * Organizations this credential can act in: viewers and lapsed
+   * subscriptions are left out, since a write there fails anyway. Cached for
+   * the life of the api instance (one request in hosted mode, one process
+   * over stdio).
+   */
+  async writableOrganizations(): Promise<OrganizationSummary[]> {
+    if (!this.orgCache) {
+      const list = await this.request<Array<Record<string, unknown>>>('GET', '/organizations');
+      this.orgCache = (Array.isArray(list) ? list : []).map((o) => ({
+        id: String(o.id),
+        name: String(o.name ?? ''),
+        userRole: typeof o.userRole === 'string' ? o.userRole : null,
+        hasValidSubscription: o.hasValidSubscription !== false,
+      }));
+    }
+    return this.orgCache.filter((o) => o.userRole !== 'viewer' && o.hasValidSubscription);
+  }
+
+  /**
+   * The organization to use when a tool call names none. An API key carries
+   * its organization. An OAuth user (every ChatGPT and Claude web session)
+   * carries nothing, so the only safe default is the single organization they
+   * can write to; with several, the caller has to choose — see resolveOrg in
+   * tools.ts, which lists the candidates in the error so one call suffices.
+   */
   async defaultOrganizationId(): Promise<string | null> {
     if (this.isApiKey) {
       await this.getToken();
       return this.session?.organizationId ?? null;
     }
-    return null;
+    const orgs = await this.writableOrganizations();
+    return orgs.length === 1 ? orgs[0].id : null;
   }
 
   async request<T = unknown>(

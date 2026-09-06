@@ -140,6 +140,7 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   publish_app: { title: 'Publish app', readOnlyHint: false, destructiveHint: false },
   create_app_endpoint: { title: 'Create app endpoint', readOnlyHint: false, destructiveHint: false },
   create_app_api_key: { title: 'Create app API key', readOnlyHint: false, destructiveHint: false },
+  build_backend: { title: 'Build a backend in one call', readOnlyHint: false, destructiveHint: false },
   list_boards: { title: 'List boards', readOnlyHint: true },
   list_apps: { title: 'List apps', readOnlyHint: true },
   list_app_endpoints: { title: 'List app endpoints', readOnlyHint: true },
@@ -180,12 +181,19 @@ export function registerTools(
   const resolveOrg = async (organizationId?: string): Promise<string> => {
     if (organizationId) return organizationId;
     const fallback = await getApi().defaultOrganizationId();
-    if (!fallback) {
+    if (fallback) return fallback;
+    // No usable default. Name the candidates here so the model can choose in
+    // this same turn instead of spending a round trip on list_organizations.
+    const orgs = await getApi().writableOrganizations();
+    if (orgs.length === 0) {
       throw new Error(
-        'No organizationId given and none is implied by the credential. Call list_organizations and pass organizationId explicitly.',
+        `This account has no organization it can write to. Create one at ${getApi().appUrl('/')} or ask an organization admin for access.`,
       );
     }
-    return fallback;
+    const named = orgs.map((o) => `"${o.name}" = ${o.id}`).join('; ');
+    throw new Error(
+      `This account belongs to ${orgs.length} organizations, so pass organizationId. Candidates: ${named}. If the user did not say which, ask, or pick the one whose name matches the request.`,
+    );
   };
 
   // ── Onboarding (stdio mode only — hosted mode authenticates via OAuth) ────
@@ -928,7 +936,7 @@ export function registerTools(
         .array(
           z.object({
             columnId: z.string().describe('Column id (from get_board_schema)'),
-            alias: z.string().optional().describe('JSON key exposed for this column (letters, digits, underscore; reserved item fields refused)'),
+            alias: z.string().optional().describe('JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.'),
             readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
@@ -982,7 +990,7 @@ export function registerTools(
         .array(
           z.object({
             columnId: z.string().describe('Column id (from get_board_schema)'),
-            alias: z.string().optional().describe('JSON key exposed for this column (letters, digits, underscore; reserved item fields refused)'),
+            alias: z.string().optional().describe('JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.'),
             readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
           }),
         )
@@ -1006,14 +1014,260 @@ export function registerTools(
   tool(
     'create_app_api_key',
     'Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.',
-    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), name: z.string().optional().describe('Human-readable name'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
-    async ({ appId, name, organizationId }) => {
+    {
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      name: z.string().optional().describe('Human-readable name'),
+      scopes: z
+        .array(z.enum(['read', 'write']))
+        .optional()
+        .describe('Permissions recorded on the key: ["read"] or ["read","write"]. Omit to match the app: write when any endpoint accepts POST, PATCH or DELETE.'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+    },
+    async ({ appId, name, scopes, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
         await getApi().request('POST', `/organizations/${orgId}/apps/${appId}/api-keys`, {
           name: name || 'frontend',
+          ...(scopes?.length ? { scopes } : {}),
         }),
       );
+    },
+  );
+
+  // ── One-call backend ───────────────────────────────────────────────────────
+  // The model designs; this executes. Ten tool calls became one because every
+  // one of them was a place for the user to see plumbing: organization ids,
+  // reserved aliases, column ids, and ten verbose results (an external review
+  // of the ChatGPT connector scored exactly those). Deterministic — no model
+  // in here, the caller already is one.
+  const RESERVED_ALIASES = new Set([
+    'id', 'title', 'description', 'status', 'priority', 'duedate', 'assignedto',
+    'createdat', 'updatedat', 'order', 'appuserid',
+  ]);
+  const toAlias = (name: string, index: number, used: Set<string>): string => {
+    let base = name
+      .replace(/[^A-Za-z0-9]+/g, ' ')
+      .trim()
+      .split(' ')
+      .filter(Boolean)
+      .map((w, i) =>
+        i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1),
+      )
+      .join('');
+    if (!base || /^\d/.test(base)) base = `field${index + 1}`;
+    if (RESERVED_ALIASES.has(base.toLowerCase())) base = `${base}Value`;
+    let alias = base;
+    let n = 2;
+    while (used.has(alias.toLowerCase())) alias = `${base}${n++}`;
+    used.add(alias.toLowerCase());
+    return alias;
+  };
+  const toSlug = (name: string, index: number, used: Set<string>): string => {
+    let base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!base) base = `board-${index + 1}`;
+    let slug = base;
+    let n = 2;
+    while (used.has(slug)) slug = `${base}-${n++}`;
+    used.add(slug);
+    return slug;
+  };
+
+  tool(
+    'build_backend',
+    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns, optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices, relation for links between boards), choose which board gets which fields — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Note every board also carries the built-in item fields (title, status, priority, dueDate, assignedTo); name a business status column something specific, e.g. "Repair Status", so it is not confused with the built-in one.',
+    {
+      project: z
+        .object({
+          name: z.string().describe('Project name, e.g. "Bike Repair Shop"'),
+          description: z.string().optional().describe('One line on what the system is for'),
+        })
+        .describe('The project that holds the boards'),
+      boards: z
+        .array(
+          z.object({
+            name: z.string().describe('Board (table) name, e.g. "Repair Orders"'),
+            description: z.string().optional().describe('One line on what a row is'),
+            columns: z
+              .array(
+                z.object({
+                  name: z.string().describe('Column name as the user would say it, e.g. "Customer", "Phone", "Repair Status"'),
+                  type: z.string().describe('text, rich_text, number, currency, date, datetime, phone, email, link, checkbox, dropdown, status, priority, rating, file, people, relation, label, duration'),
+                  options: z.array(z.string()).optional().describe('The closed choices for dropdown/status/priority, e.g. ["Received","In Repair","Ready","Completed"]'),
+                  required: z.boolean().optional().describe('Reject API creates that leave it blank'),
+                  validation: z.record(z.any()).optional().describe('{ unique, min, max, minLength, maxLength, pattern, patternMessage }'),
+                  settings: z.record(z.any()).optional().describe('Other type settings, e.g. { currency: "ILS" } or { relatedBoardName } for relation'),
+                  alias: z.string().optional().describe('API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)'),
+                }),
+              )
+              .min(1)
+              .describe('Typed columns of the board'),
+            rows: z
+              .array(z.record(z.any()))
+              .optional()
+              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]; "title" sets the row title, otherwise the first text value is used'),
+          }),
+        )
+        .min(1)
+        .describe('The boards (tables) of the backend'),
+      api: z
+        .object({
+          name: z.string().optional().describe('App name; defaults to "<project> API"'),
+          methods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods every endpoint accepts; defaults to all four'),
+          rowLevelSecurity: z.boolean().optional().describe('true when the app has its own users and each may see only their rows (the caller then sends X-App-User)'),
+        })
+        .optional()
+        .describe('Include to publish a REST API over every board and mint a key; omit for a boards-only build'),
+      organizationId: z.string().optional().describe('Organization id; needed only when the account belongs to several (the error then lists them)'),
+    },
+    async ({ project, boards, api, organizationId }) => {
+      // Validate the whole spec before creating anything: a half-built project
+      // after a spec error is worse than a clear refusal.
+      const problems: string[] = [];
+      for (const b of boards) {
+        for (const c of b.columns) {
+          if ((c.type === 'dropdown' || c.type === 'status' || c.type === 'priority') && !c.options?.length && !(c.settings as any)?.options) {
+            problems.push(`${b.name}.${c.name}: ${c.type} needs options`);
+          }
+          if (c.alias && RESERVED_ALIASES.has(c.alias.toLowerCase())) {
+            problems.push(`${b.name}.${c.name}: alias "${c.alias}" is a reserved item field`);
+          }
+        }
+      }
+      if (problems.length) return ok({ built: false, problems });
+
+      const orgId = await resolveOrg(organizationId);
+      const client = getApi();
+      const notes: string[] = [];
+      const created = await client.request<any>('POST', `/organizations/${orgId}/projects`, {
+        name: project.name,
+        organizationId: orgId,
+        ...(project.description ? { description: project.description } : {}),
+      });
+      try {
+        const outBoards: Array<{ id: string; name: string; slug: string; columns: Array<{ id: string; name: string; type: string; alias: string }>; rows: number; adminUrl: string }> = [];
+        const usedSlugs = new Set<string>();
+        for (const [bi, b] of boards.entries()) {
+          const board = await client.request<any>('POST', `/projects/${created.id}/boards`, {
+            name: b.name,
+            projectId: created.id,
+            ...(b.description ? { description: b.description } : {}),
+          });
+          const usedAliases = new Set<string>();
+          const cols: Array<{ id: string; name: string; type: string; alias: string }> = [];
+          for (const [ci, c] of b.columns.entries()) {
+            let type = c.type;
+            const settings: Record<string, unknown> = { ...(c.settings || {}) };
+            if (c.options?.length) settings.options = c.options;
+            if (c.validation) settings.validation = c.validation;
+            const objection = columnTypeObjection(c.name, type, settings);
+            if (objection && objection.suggestedType !== type) {
+              notes.push(`${b.name}.${c.name}: created as ${objection.suggestedType} rather than ${type}, because the name says so`);
+              type = objection.suggestedType;
+            }
+            const column = await client.request<any>(
+              'POST',
+              `/projects/${created.id}/boards/${board.id}/columns`,
+              {
+                name: c.name,
+                type,
+                ...(Object.keys(settings).length ? { settings } : {}),
+                ...(c.required !== undefined ? { isRequired: c.required } : {}),
+              },
+            );
+            const alias = c.alias || toAlias(c.name, ci, usedAliases);
+            if (c.alias) usedAliases.add(c.alias.toLowerCase());
+            cols.push({ id: column.id, name: c.name, type, alias });
+          }
+          let rowCount = 0;
+          if (b.rows?.length) {
+            const byName = new Map(cols.map((c) => [c.name.toLowerCase(), c]));
+            for (const row of b.rows) {
+              const cells: Record<string, unknown> = {};
+              let title = typeof row.title === 'string' ? row.title : '';
+              for (const [k, v] of Object.entries(row)) {
+                if (k === 'title') continue;
+                const col = byName.get(k.toLowerCase());
+                if (!col) {
+                  notes.push(`${b.name}: row field "${k}" matches no column and was skipped`);
+                  continue;
+                }
+                cells[col.id] = v;
+                if (!title && typeof v === 'string') title = v;
+              }
+              await client.request('POST', `/projects/${created.id}/boards/${board.id}/items`, {
+                title: title || `${b.name} ${rowCount + 1}`,
+                cells,
+              });
+              rowCount++;
+            }
+          }
+          outBoards.push({
+            id: board.id,
+            name: b.name,
+            slug: toSlug(b.name, bi, usedSlugs),
+            columns: cols,
+            rows: rowCount,
+            adminUrl: client.appUrl(`/projects/${created.id}/boards/${board.id}`),
+          });
+        }
+
+        let apiOut: Record<string, unknown> | undefined;
+        if (api) {
+          const app = await client.request<any>('POST', `/organizations/${orgId}/apps`, {
+            name: api.name || `${project.name} API`,
+            projectId: created.id,
+          });
+          await client.request('POST', `/organizations/${orgId}/apps/${app.id}/publish`, {});
+          const methods = api.methods?.length ? api.methods : ['GET', 'POST', 'PATCH', 'DELETE'];
+          const endpoints: Array<Record<string, unknown>> = [];
+          for (const b of outBoards) {
+            await client.request('POST', `/organizations/${orgId}/apps/${app.id}/endpoints`, {
+              boardId: b.id,
+              slug: b.slug,
+              name: b.name,
+              allowedMethods: methods,
+              exposedColumns: b.columns.map((c) => ({ columnId: c.id, alias: c.alias })),
+              ...(api.rowLevelSecurity ? { rowLevelSecurity: { enabled: true } } : {}),
+            });
+            endpoints.push({
+              board: b.name,
+              url: `${client.apiUrl}/apps/${app.slug}/api/${b.slug}`,
+              methods,
+              fields: b.columns.map((c) => c.alias),
+            });
+          }
+          const writes = methods.some((m: string) => m !== 'GET');
+          const key = await client.request<any>('POST', `/organizations/${orgId}/apps/${app.id}/api-keys`, {
+            name: 'frontend',
+            scopes: writes ? ['read', 'write'] : ['read'],
+          });
+          apiOut = {
+            appId: app.id,
+            appSlug: app.slug,
+            baseUrl: `${client.apiUrl}/apps/${app.slug}/api`,
+            openapi: `${client.apiUrl}/apps/${app.slug}/api/openapi.json`,
+            endpoints,
+            apiKey: key.rawKey,
+            keyRule:
+              'Keep the key server-side (env var, API route); send it as Authorization: Bearer <key>.' +
+              (api.rowLevelSecurity ? ' Row-level security is on: also send X-App-User: <your user id> on every call.' : ''),
+            adminUrl: client.appUrl(`/apps/${app.id}`),
+          };
+        }
+
+        return ok({
+          built: true,
+          project: { id: created.id, name: project.name, adminUrl: client.appUrl(`/projects/${created.id}`) },
+          boards: outBoards.map(({ slug, ...b }) => (api ? { ...b, endpoint: slug } : b)),
+          ...(apiOut ? { api: apiOut } : {}),
+          ...(notes.length ? { notes } : {}),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `build_backend stopped: ${message}. Project "${project.name}" (${created.id}) was created and may be partial — fix the spec and call again with a new project name, or delete it at ${client.appUrl(`/projects/${created.id}`)}.`,
+        );
+      }
     },
   );
 
