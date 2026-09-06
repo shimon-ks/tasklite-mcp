@@ -3,6 +3,18 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.10.0 — 2026-09-06
+
+### Added
+- `deploy_frontend` takes the site in one of three ways instead of only a
+  local folder: `files` (the files inline, path + content, base64 for
+  binaries; up to 500 files / 8MB) so ChatGPT and every hosted client can
+  write a page and put it live in the same turn; `zipUrl` (a public https
+  zip such as a Lovable/Bolt export or a GitHub release asset, up to 50MB;
+  a single top-level folder is re-rooted); and `dir` as before. Exactly one
+  of the three is required. Private hosts, plain http and non-zip answers
+  are refused before anything is uploaded.
+
 ## 0.9.0 — 2026-09-06
 
 Requires a TaskLite server from 2026-09-06 for the new behaviour; older

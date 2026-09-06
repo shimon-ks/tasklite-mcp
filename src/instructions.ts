@@ -59,8 +59,11 @@ https://tasklite.net/docs Users are the developer's own (any sign-in); their ser
 sends X-App-User: <user id> with the key, and endpoints with rowLevelSecurity
 return, update and delete only that user's rows. No user system to build.
 
-TaskLite also HOSTS static frontends: build the app (Vite/Next export/CRA),
-then deploy_frontend(appId, dir: the build output folder). The result is a
+TaskLite also HOSTS static frontends. deploy_frontend takes the site in one
+of three ways: files (inline path+content — from ChatGPT or any hosted client,
+write index.html and its assets and deploy in the same turn), zipUrl (a public
+https zip such as a Lovable/Bolt export or a GitHub release asset), or dir (a
+local build folder, only when the MCP runs next to the files). The result is a
 live https://{slug}.tasklite.dev URL, no server or hosting setup on the user's
 side. Hosted frontends call the app API at the relative path /api/{endpoint}
 (the hosting proxy injects the app identity), so generated code needs no

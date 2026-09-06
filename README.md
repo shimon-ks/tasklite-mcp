@@ -66,13 +66,20 @@ One hosted server, every MCP client. Full setup notes: https://tasklite.net/docs
 
 ## Hosting your frontend
 
-Once the frontend is built, `deploy_frontend` uploads the build output and
-returns a live URL at `https://{slug}.tasklite.dev`. No server, no hosting
-account, no CI to configure:
+`deploy_frontend` puts a static frontend on `https://{slug}.tasklite.dev`.
+No server, no hosting account, no CI to configure. Hand the site over in one
+of three ways:
 
 ```
+deploy_frontend(appId: "app-xxxxxx", files: [{ path: "index.html", content: "<!doctype html>…" }, { path: "app.js", content: "…" }])
+deploy_frontend(appId: "app-xxxxxx", zipUrl: "https://github.com/you/site/releases/download/v1/dist.zip")
 deploy_frontend(appId: "app-xxxxxx", dir: "./dist")
 ```
+
+`files` is the path from ChatGPT or any hosted client: the assistant writes the
+page and deploys it in the same turn. `zipUrl` takes an export from Lovable,
+Bolt or a GitHub release. `dir` is for an MCP running on the machine with the
+build output.
 
 Hosted pages call the app API through the relative path `/api/{endpoint}`. The
 hosting proxy attaches the app identity server-side, so the browser never

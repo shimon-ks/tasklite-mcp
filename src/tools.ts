@@ -1670,36 +1670,126 @@ export function registerTools(
 
   // ── Frontend hosting ({slug}.tasklite.dev) ────────────────────────────────
 
+  // Shared by the three deploy_frontend inputs: the zip must serve index.html
+  // at its root. A zip whose only top-level entry is a folder (how most
+  // exporters and GitHub pack a build) is re-rooted rather than rejected.
+  const normalizeBundle = (zip: AdmZip): AdmZip => {
+    const entries = zip.getEntries().filter((e) => !e.isDirectory && !e.entryName.startsWith('__MACOSX/'));
+    if (entries.some((e) => e.entryName === 'index.html')) return zip;
+    const tops = new Set(entries.map((e) => e.entryName.split('/')[0]));
+    if (tops.size === 1) {
+      const [top] = [...tops];
+      if (entries.some((e) => e.entryName === `${top}/index.html`)) {
+        const out = new AdmZip();
+        for (const e of entries) out.addFile(e.entryName.slice(top.length + 1), e.getData());
+        return out;
+      }
+    }
+    throw new Error(
+      'The bundle has no index.html at its root. Pass the build OUTPUT (dist/, build/, out/), not the project source.',
+    );
+  };
+  const MAX_BUNDLE = 50 * 1024 * 1024;
+  const checkBundleSize = (n: number) => {
+    if (n > MAX_BUNDLE) {
+      throw new Error(`Bundle is ${Math.round(n / 1024 / 1024)}MB zipped — the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`);
+    }
+  };
+
   tool(
     'deploy_frontend',
-    'Deploy a built static frontend to TaskLite hosting: zips the build output directory (dist/, build/, out/ — the folder that contains index.html), uploads it, and returns the live URL https://{slug}.tasklite.dev. The app is auto-published on first deploy. Runs only where the files are (local/stdio mode). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity.',
+    'Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.',
     {
       appId: z.string().describe('App UUID or slug (app-xxxxxx) — see list_apps'),
-      dir: z.string().describe('Path to the BUILD OUTPUT directory (the one containing index.html), not the project root'),
+      files: z
+        .array(
+          z.object({
+            path: z.string().describe('Path inside the site, e.g. "index.html", "app.js", "css/style.css"'),
+            content: z.string().describe('File content. Text as-is; binary as base64 with encoding "base64"'),
+            encoding: z.enum(['utf8', 'base64']).optional().describe('Default utf8'),
+          }),
+        )
+        .max(500)
+        .optional()
+        .describe('The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation'),
+      zipUrl: z.string().url().optional().describe('Public https URL of a zip of the BUILD OUTPUT (index.html at the root, or inside a single top-level folder). Up to 50MB'),
+      dir: z.string().optional().describe('Local path to the BUILD OUTPUT directory (the one containing index.html), not the project root. Only where the MCP runs on the same machine as the files'),
       organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
     },
-    async ({ appId, dir, organizationId }) => {
-      const orgId = await resolveOrg(organizationId);
-      const abs = resolvePath(dir);
-      if (!existsSync(abs) || !statSync(abs).isDirectory()) {
-        throw new Error(`Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/).`);
-      }
-      if (!existsSync(joinPath(abs, 'index.html'))) {
-        const candidate = ['dist', 'build', 'out'].find((d) =>
-          existsSync(joinPath(abs, d, 'index.html')),
-        );
+    async ({ appId, files, zipUrl, dir, organizationId }: { appId: string; files?: Array<{ path: string; content: string; encoding?: 'utf8' | 'base64' }>; zipUrl?: string; dir?: string; organizationId?: string }) => {
+      const given = [files ? 'files' : '', zipUrl ? 'zipUrl' : '', dir ? 'dir' : ''].filter(Boolean);
+      if (given.length !== 1) {
         throw new Error(
-          candidate
-            ? `No index.html in ${abs} — did you mean ${joinPath(abs, candidate)}?`
-            : `No index.html in ${abs}. Pass the build OUTPUT directory, and build first if you haven't.`,
+          given.length === 0
+            ? 'Pass the frontend as `files` (inline), `zipUrl` (public zip) or `dir` (local build folder).'
+            : `Pass only one of files / zipUrl / dir (got ${given.join(', ')}).`,
         );
       }
-      const zip = new AdmZip();
-      zip.addLocalFolder(abs);
-      const buffer = zip.toBuffer();
-      if (buffer.length > 50 * 1024 * 1024) {
-        throw new Error(`Bundle is ${Math.round(buffer.length / 1024 / 1024)}MB zipped — the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`);
+      const orgId = await resolveOrg(organizationId);
+      let buffer: Buffer;
+
+      if (files) {
+        const zip = new AdmZip();
+        let total = 0;
+        const seen = new Set<string>();
+        for (const f of files) {
+          const rel = f.path.replace(/\\/g, '/').replace(/^\.?\//, '');
+          if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '')) {
+            throw new Error(`Bad file path "${f.path}": use a relative path inside the site, e.g. "assets/app.js".`);
+          }
+          if (seen.has(rel)) throw new Error(`Duplicate file path "${rel}".`);
+          seen.add(rel);
+          const data = Buffer.from(f.content, f.encoding === 'base64' ? 'base64' : 'utf8');
+          total += data.length;
+          if (total > 8 * 1024 * 1024) {
+            throw new Error('Inline files exceed 8MB decoded. Build the site and pass a zipUrl (up to 50MB), or keep media out of the bundle.');
+          }
+          zip.addFile(rel, data);
+        }
+        if (!seen.has('index.html')) {
+          throw new Error(`files must include "index.html" at the root (got: ${[...seen].slice(0, 8).join(', ')}${seen.size > 8 ? ', …' : ''}).`);
+        }
+        buffer = zip.toBuffer();
+      } else if (zipUrl) {
+        const u = new URL(zipUrl);
+        if (u.protocol !== 'https:') throw new Error('zipUrl must be https.');
+        if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname) || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) {
+          throw new Error('zipUrl must point at a public host, not a private address.');
+        }
+        const res = await fetch(zipUrl, { redirect: 'follow', headers: { accept: 'application/zip, application/octet-stream, */*' } });
+        if (!res.ok) throw new Error(`Could not download zipUrl: HTTP ${res.status}.`);
+        const declared = Number(res.headers.get('content-length') || 0);
+        checkBundleSize(declared);
+        const raw = Buffer.from(await res.arrayBuffer());
+        checkBundleSize(raw.length);
+        let zip: AdmZip;
+        try {
+          zip = new AdmZip(raw);
+        } catch {
+          throw new Error('zipUrl did not return a zip file. Point it at the archive itself (a GitHub release asset, an export download), not at a page.');
+        }
+        buffer = normalizeBundle(zip).toBuffer();
+      } else {
+        const abs = resolvePath(dir as string);
+        if (!existsSync(abs) || !statSync(abs).isDirectory()) {
+          throw new Error(`Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/). If the MCP is not running on the machine with the files, pass them as \`files\` or a \`zipUrl\` instead.`);
+        }
+        if (!existsSync(joinPath(abs, 'index.html'))) {
+          const candidate = ['dist', 'build', 'out'].find((d) =>
+            existsSync(joinPath(abs, d, 'index.html')),
+          );
+          throw new Error(
+            candidate
+              ? `No index.html in ${abs} — did you mean ${joinPath(abs, candidate)}?`
+              : `No index.html in ${abs}. Pass the build OUTPUT directory, and build first if you haven't.`,
+          );
+        }
+        const zip = new AdmZip();
+        zip.addLocalFolder(abs);
+        buffer = zip.toBuffer();
       }
+      checkBundleSize(buffer.length);
+
       const result = await getApi().requestUpload<Record<string, unknown>>(
         `/organizations/${orgId}/apps/${appId}/deployments`,
         'file',
