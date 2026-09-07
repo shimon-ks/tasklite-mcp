@@ -3,6 +3,28 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.12.0 — 2026-09-07
+
+`query_items` could only page. Anyone who wanted a subset had to pull the
+whole board and filter on their side, which is slow, expensive, and reads
+like the product cannot query its own data. The REST endpoints could always
+do more; the tool simply never exposed it.
+
+### Added
+- `query_items` takes `search`, `status`, `priority`, `sort` and `archived`.
+  `search` matches the row title and its text cells; `status` and `priority`
+  take a comma-separated list; `sort` takes `title`, `createdAt`, `updatedAt`
+  or `status`, with a leading `-` for descending; `archived` chooses `active`
+  (the default), `archived` or `all`. They combine with `limit` and `page`,
+  and they apply to the paging loop as well, so an unpaged call also comes
+  back narrowed instead of pulling every row first.
+
+### Changed
+- `query_items` says in its description that a published app's own REST
+  endpoints take a fuller grammar — nine filter operators per column,
+  relation filters, per-field search — and points at `get_app_spec` for it.
+  The tool is the admin view of a board, not the app's query language.
+
 ## 0.11.0 — 2026-09-07
 
 From a reviewer's API-quality report.

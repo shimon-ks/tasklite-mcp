@@ -718,15 +718,34 @@ export function registerTools(
 
   tool(
     'query_items',
-    'List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates).',
+    'List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.',
     {
       projectId: z.string().describe('Project id (from list_projects / create_project)'),
       boardId: z.string().describe('Board id (from list_boards / create_board)'),
+      search: z.string().optional().describe('Free text; matches the row title and its text cells'),
+      status: z.string().optional().describe('Only rows with one of these statuses, comma separated: "todo,in_progress" (task boards only)'),
+      priority: z.string().optional().describe('Only rows with one of these priorities, comma separated (task boards only)'),
+      sort: z.string().optional().describe('Sort by title, createdAt, updatedAt or status; prefix with "-" for descending, e.g. "-createdAt". Anything else keeps the board order'),
+      archived: z.enum(['active', 'archived', 'all']).optional().describe('Which rows to include. Default active'),
       limit: z.number().int().positive().max(500).optional().describe('Page size; omit to fetch all items'),
       page: z.number().int().positive().optional().describe('1-based page, only with limit'),
     },
-    async ({ projectId, boardId, limit, page }) => {
+    async ({ projectId, boardId, search, status, priority, sort, archived, limit, page }: {
+      projectId: string; boardId: string; search?: string; status?: string;
+      priority?: string; sort?: string; archived?: string; limit?: number; page?: number;
+    }) => {
       const base = `/projects/${projectId}/boards/${boardId}/items`;
+      const filters = new URLSearchParams();
+      if (search) filters.set('search', search);
+      if (status) filters.set('status', status);
+      if (priority) filters.set('priority', priority);
+      if (archived) filters.set('archiveFilter', archived);
+      if (sort) {
+        const desc = sort.startsWith('-');
+        filters.set('sortField', desc ? sort.slice(1) : sort);
+        filters.set('sortDirection', desc ? 'DESC' : 'ASC');
+      }
+      const extra = filters.toString();
       // A row of a data board is a record, not a task: the App API already
       // omits the built-in task fields for those boards, and this tool now
       // matches it instead of returning status, priority and the rest of the
@@ -762,12 +781,13 @@ export function registerTools(
       if (limit) {
         const qs = new URLSearchParams({ limit: String(limit) });
         if (page) qs.set('page', String(page));
-        return ok(stripAll(await getApi().request('GET', `${base}?${qs.toString()}`)));
+        const url = `${base}?${qs.toString()}${extra ? `&${extra}` : ''}`;
+        return ok(stripAll(await getApi().request('GET', url)));
       }
       // No explicit paging: fetch everything in 200-item pages and concatenate.
       const all: unknown[] = [];
       for (let p = 1; p <= 50; p++) {
-        const res = await getApi().request('GET', `${base}?limit=200&page=${p}`);
+        const res = await getApi().request('GET', `${base}?limit=200&page=${p}${extra ? `&${extra}` : ''}`);
         const batch = Array.isArray(res)
           ? res
           : ((res as { items?: unknown[]; data?: unknown[] })?.items ??
