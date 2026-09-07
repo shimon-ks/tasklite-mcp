@@ -3,6 +3,29 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.15.0 — 2026-09-08
+
+Every deployed version is now reachable on its own.
+
+Hosting always kept the last five releases on disk, but only the live one had
+an address — so "show me what the previous version looked like" meant rolling
+back the site everyone sees. Each version now answers at
+`https://v{n}--{slug}.tasklite.dev`, served straight from its frozen release
+directory. Previews carry `noindex, nofollow` so an old build never competes
+with the live site in search.
+
+### Changed
+- `list_deployments` returns `previewUrl` and `onDisk` per version, plus
+  `keepReleases`. A version pruned from disk reports `onDisk: false` and no
+  previewUrl, instead of only failing when you try to activate it.
+- `deploy_frontend` returns `previewUrl` alongside `url`.
+- `rollback_deployment` says to check `onDisk` first, and points at the
+  preview URL for the common case of *looking* at an old version rather than
+  restoring it.
+
+Requires a TaskLite server from 2026-09-08 or later; against an older server
+the new fields are simply absent.
+
 ## 0.14.0 — 2026-09-07
 
 Every tool now declares all three annotation hints explicitly.

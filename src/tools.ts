@@ -3127,7 +3127,7 @@ export function registerTools(
 
   tool(
     "deploy_frontend",
-    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.",
+    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser. The result carries `previewUrl` as well as `url`: the live address, and this exact version on its own.",
     {
       appId: z
         .string()
@@ -3311,14 +3311,14 @@ export function registerTools(
       return ok({
         ...rest,
         appPublished: true,
-        note: `Live now${publishedByThisDeploy ? " (this deploy also published the app)" : ""}. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.`,
+        note: `Live now${publishedByThisDeploy ? " (this deploy also published the app)" : ""}. previewUrl opens this exact version without changing what is live. Old versions stay reachable at their own previewUrl and can be restored with rollback_deployment; only the last 5 stay on disk.`,
       });
     },
   );
 
   tool(
     "list_deployments",
-    "List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.",
+    "List the hosted-frontend deployments of an app — every version, which one is live, the app's public URL, and for each version a `previewUrl` (https://v{n}--{slug}.tasklite.dev) that serves THAT version on its own without making it live. Only the last `keepReleases` bundles survive on disk: a version with `onDisk: false` has no previewUrl and cannot be rolled back to, so check it before offering either.",
     {
       appId: z
         .string()
@@ -3343,7 +3343,7 @@ export function registerTools(
 
   tool(
     "rollback_deployment",
-    "Point the live URL back at a previous deployment version (see list_deployments for available versions).",
+    "Point the live URL back at a previous deployment version. Pick one that list_deployments reports with `onDisk: true` — a pruned version is refused. To let someone SEE an old version without changing what is live, hand them its previewUrl instead.",
     {
       appId: z
         .string()
