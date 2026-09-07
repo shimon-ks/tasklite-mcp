@@ -3,6 +3,25 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.13.0 — 2026-09-07
+
+Push notifications reached the API, so the tools can see and test them.
+
+A live connection reaches a phone only while the app is on screen; the
+operating system closes it the moment the app goes to the background. What
+actually reaches someone whose app is closed is a push, and it now exists
+as a `send_push` automation action.
+
+### Added
+- `push_status`. Whether an app can notify phones, whose Firebase project it
+  sends through, and how many devices have registered. When nothing is set
+  up it says how to set it up — and says plainly that the service account is
+  a private key which must not be pasted into a chat.
+- `send_test_push`. One real notification to named app users, so the chain
+  can be proven before an automation depends on it. The answer separates
+  "delivered", "this user has no device yet" and "the service says this
+  device is gone", because those are three different problems.
+
 ## 0.12.0 — 2026-09-07
 
 `query_items` could only page. Anyone who wanted a subset had to pull the

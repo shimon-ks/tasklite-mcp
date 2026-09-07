@@ -125,6 +125,8 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   update_board: { title: 'Update board', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   delete_board: { title: 'Delete board', readOnlyHint: false, destructiveHint: true },
   delete_project: { title: 'Delete project', readOnlyHint: false, destructiveHint: true },
+  push_status: { title: 'Push status', readOnlyHint: true },
+  send_test_push: { title: 'Send a test push', readOnlyHint: false },
   update_column: { title: 'Update column', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   delete_column: { title: 'Delete column', readOnlyHint: false, destructiveHint: true },
   reorder_columns: { title: 'Reorder columns', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
@@ -983,6 +985,64 @@ export function registerTools(
         projectId,
       });
       return ok({ app, adminUrl: getApi().appUrl(`/apps/${app.id}`) });
+    },
+  );
+
+  tool(
+    'push_status',
+    'Whether an app can send push notifications to phones, and how many devices are registered. Push goes out through the customer\'s OWN Firebase project, so it has to be configured once per app before send_push automations do anything. This tool never returns the key.',
+    {
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+    },
+    async ({ appId, organizationId }: { appId: string; organizationId?: string }) => {
+      const orgId = await resolveOrg(organizationId);
+      const status = await getApi().request<any>('GET', `/organizations/${orgId}/apps/${appId}/push`);
+      return ok({
+        ...status,
+        ...(status?.configured
+          ? {}
+          : {
+              howToConfigure:
+                'Push is not set up for this app. It needs the customer\'s own Firebase service account, which is a private key: it must NOT be pasted into a chat. Tell them to download it from Firebase console -> Project settings -> Service accounts -> Generate new private key, and POST the file to /organizations/' +
+                orgId +
+                '/apps/' +
+                appId +
+                '/push/credentials as { "serviceAccount": <the JSON> }.',
+            }),
+        ...(status?.configured && !status?.devices
+          ? {
+              note: 'Configured, but no device has registered yet. The app must POST its FCM token to /apps/<slug>/api/devices after the user signs in.',
+            }
+          : {}),
+      });
+    },
+  );
+
+  tool(
+    'send_test_push',
+    'Send one real push notification to the given app users, to prove the chain works before an automation depends on it. Confirm with the user first: this reaches actual phones.',
+    {
+      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
+      userIds: z.array(z.string()).describe('App user ids to notify (the same ids row-level security uses)'),
+      title: z.string().optional().describe('Notification title; defaults to "TaskLite"'),
+      body: z.string().optional().describe('Notification body'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+    },
+    async ({ appId, userIds, title, body, organizationId }: {
+      appId: string; userIds: string[]; title?: string; body?: string; organizationId?: string;
+    }) => {
+      const orgId = await resolveOrg(organizationId);
+      const res = await getApi().request<any>('POST', `/organizations/${orgId}/apps/${appId}/push/test`, {
+        userIds,
+        title,
+        body,
+      });
+      return ok({
+        ...res,
+        reading:
+          'sent = notifications handed to Google. unreachable = users with no registered device, which means the app has not sent its token yet. removedTokens = devices the service says no longer exist; those are deleted.',
+      });
     },
   );
 
