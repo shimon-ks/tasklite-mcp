@@ -3,6 +3,24 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.11.0 — 2026-09-07
+
+From a reviewer's API-quality report.
+
+### Added
+- `delete_project`. Boards, columns and rows could be deleted and projects
+  could not, so anything built for a test stayed forever. The project goes
+  to the organization recycle bin and can be restored from the admin.
+
+### Changed
+- `query_items` on a data board returns records, not tasks: `status`,
+  `priority`, `dueDate`, `subtaskProgress` and the rest of the task fields
+  are left out, matching what the App API already does for those boards.
+- `build_backend` says when a row has no title and no text value, so
+  nothing can reference it, instead of reporting the missing title as a
+  problem in the board that pointed at it. The description now matches what
+  the code does.
+
 ## 0.10.1 — 2026-09-07
 
 ### Fixed

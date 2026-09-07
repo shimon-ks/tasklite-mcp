@@ -124,6 +124,7 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
   get_board_schema: { title: 'Read board schema', readOnlyHint: true },
   update_board: { title: 'Update board', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   delete_board: { title: 'Delete board', readOnlyHint: false, destructiveHint: true },
+  delete_project: { title: 'Delete project', readOnlyHint: false, destructiveHint: true },
   update_column: { title: 'Update column', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   delete_column: { title: 'Delete column', readOnlyHint: false, destructiveHint: true },
   reorder_columns: { title: 'Reorder columns', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
@@ -617,6 +618,24 @@ export function registerTools(
   );
 
   tool(
+    'delete_project',
+    'Delete a project with every board, column and row inside it. Destructive: confirm with the user first, and name the project in the confirmation. The project goes to the organization recycle bin, so it can be restored from the admin until it is emptied.',
+    {
+      projectId: z.string().describe('Project id (from list_projects / create_project)'),
+      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+    },
+    async ({ projectId, organizationId }: { projectId: string; organizationId?: string }) => {
+      const orgId = await resolveOrg(organizationId);
+      await getApi().request('DELETE', `/organizations/${orgId}/projects/${projectId}`);
+      return ok({
+        deleted: true,
+        projectId,
+        note: 'In the recycle bin. An organization admin can restore it, or empty the bin to remove it for good.',
+      });
+    },
+  );
+
+  tool(
     'update_column',
     'Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.',
     {
@@ -708,10 +727,42 @@ export function registerTools(
     },
     async ({ projectId, boardId, limit, page }) => {
       const base = `/projects/${projectId}/boards/${boardId}/items`;
+      // A row of a data board is a record, not a task: the App API already
+      // omits the built-in task fields for those boards, and this tool now
+      // matches it instead of returning status, priority and the rest of the
+      // task machinery on a customer or an invoice.
+      let plain = false;
+      try {
+        const board = await getApi().request<any>('GET', `/projects/${projectId}/boards/${boardId}`);
+        plain = board?.metadata?.kind === 'data';
+      } catch {
+        // Cannot read the board: return the rows unchanged rather than fail.
+      }
+      const TASK_FIELDS = [
+        'status', 'priority', 'dueDate', 'startDate', 'assignedTo', 'tags',
+        'isCompleted', 'completedAt', 'subtaskProgress', 'isTimerActive',
+        'timerStartedAt', 'totalTimeSpent', 'isRecurring', 'recurrencePattern',
+        'recurrenceEndDate', 'parentId', 'aiGenerated', 'livingTaskStatus',
+        'estimatedHours', 'actualHours',
+      ] as const;
+      const strip = (row: unknown): unknown => {
+        if (!plain || !row || typeof row !== 'object') return row;
+        const out = { ...(row as Record<string, unknown>) };
+        for (const f of TASK_FIELDS) delete out[f];
+        return out;
+      };
+      const stripAll = (res: unknown): unknown => {
+        if (!plain) return res;
+        if (Array.isArray(res)) return res.map(strip);
+        const o = res as { items?: unknown[]; data?: unknown[] } | null;
+        if (o && Array.isArray(o.items)) return { ...o, items: o.items.map(strip) };
+        if (o && Array.isArray(o.data)) return { ...o, data: o.data.map(strip) };
+        return res;
+      };
       if (limit) {
         const qs = new URLSearchParams({ limit: String(limit) });
         if (page) qs.set('page', String(page));
-        return ok(await getApi().request('GET', `${base}?${qs.toString()}`));
+        return ok(stripAll(await getApi().request('GET', `${base}?${qs.toString()}`)));
       }
       // No explicit paging: fetch everything in 200-item pages and concatenate.
       const all: unknown[] = [];
@@ -724,7 +775,7 @@ export function registerTools(
         all.push(...batch);
         if (batch.length < 200) break;
       }
-      return ok(all);
+      return ok(plain ? all.map(strip) : all);
     },
   );
 
@@ -1112,7 +1163,7 @@ export function registerTools(
             rows: z
               .array(z.record(z.any()))
               .optional()
-              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title, otherwise the first text value is used. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order).'),
+              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title; without it the first plain text value is used, and failing that the row is named after its board and position. A row that other boards reference must carry a title (or a text value) so the reference can be resolved. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order).'),
           }),
         )
         .min(1)
@@ -1154,6 +1205,10 @@ export function registerTools(
       // the spec (its title, or its first text value). Checked here so a typo
       // is refused before anything is built rather than reported as a note.
       const specTitles = new Map<string, Set<string>>();
+      // Rows with neither a title nor a plain text value: they are built
+      // (their title becomes "Orders 3") but nothing can reference them, so
+      // say that plainly instead of reporting a missing title elsewhere.
+      const untitled = new Map<string, number>();
       for (const b of boards) {
         const titles = new Set<string>();
         for (const row of b.rows || []) {
@@ -1166,6 +1221,7 @@ export function registerTools(
             }
           }
           if (title) titles.add(title.toLowerCase());
+          else untitled.set(b.name.toLowerCase(), (untitled.get(b.name.toLowerCase()) ?? 0) + 1);
         }
         specTitles.set(b.name.toLowerCase(), titles);
       }
@@ -1188,7 +1244,14 @@ export function registerTools(
             const have = specTitles.get(target) || new Set<string>();
             for (const want of (Array.isArray(v) ? v : [v]).map(String)) {
               if (!have.has(want.toLowerCase())) {
-                problems.push(`${b.name} row "${String(row.title ?? '')}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${col.relatedBoard ?? (col.settings as any)?.relatedBoardName}`);
+                const targetName = String(col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? '');
+                const blank = untitled.get(target) ?? 0;
+                problems.push(
+                  `${b.name} row "${String(row.title ?? '')}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${targetName}` +
+                    (blank
+                      ? `. ${blank} row(s) of ${targetName} have no title and no text value, so nothing can reference them — give each row a title.`
+                      : ''),
+                );
               }
             }
           }
