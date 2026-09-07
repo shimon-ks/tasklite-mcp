@@ -3,6 +3,24 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.14.0 — 2026-09-07
+
+Every tool now declares all three annotation hints explicitly.
+
+A missing hint is not the same as a false one. Until now 48 tools said
+nothing at all about `openWorldHint`, and every read-only tool said nothing
+about `destructiveHint` — so a client, or a directory reviewer, could not
+tell "this tool does not reach the open internet" from "nobody said". The
+OpenAI Apps scan flags exactly that on every tool.
+
+### Changed
+- All 48 tools carry `readOnlyHint`, `destructiveHint` and `openWorldHint`.
+  `openWorldHint` is true only where the effect leaves the user's own
+  workspace: signing up, connecting, signing in, publishing or rolling back
+  a page the public can load, an automation that may call a URL the user
+  names, and a push delivered through Google. Everything else touches only
+  data inside their own organization.
+
 ## 0.13.0 — 2026-09-07
 
 Push notifications reached the API, so the tools can see and test them.

@@ -4,13 +4,19 @@
  * one api instance per authenticated request). Deterministic by design —
  * zero LLM calls (docs/specs/MCP_SERVER_SPEC.md).
  */
-import { randomBytes } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
-import { resolve as resolvePath, join as joinPath } from 'node:path';
-import AdmZip from 'adm-zip';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
-import { TaskLiteApi, envApiUrl, envAppUrl, envApiKeyOverrides, credentialsPath } from './api.js';
+import { randomBytes } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { resolve as resolvePath, join as joinPath } from "node:path";
+import AdmZip from "adm-zip";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import {
+  TaskLiteApi,
+  envApiUrl,
+  envAppUrl,
+  envApiKeyOverrides,
+  credentialsPath,
+} from "./api.js";
 
 export type GetApi = () => TaskLiteApi;
 
@@ -26,10 +32,10 @@ export interface OnboardingHooks {
 
 // Every tool response funnels through here, which makes this the one place that
 // can guarantee no internal user row leaves the server — see sanitizeUsersDeep.
-function ok(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
+function ok(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
     content: [
-      { type: 'text', text: JSON.stringify(sanitizeUsersDeep(data), null, 2) },
+      { type: "text", text: JSON.stringify(sanitizeUsersDeep(data), null, 2) },
     ],
   };
 }
@@ -40,14 +46,25 @@ function ok(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
 // read. The backend narrows comments only, so until it narrows the rest, strip
 // any user-shaped object here, on every response. Detection keys on
 // internal-only columns so ordinary entities with id+name are left untouched.
-const USER_PUBLIC_FIELDS = ['id', 'name', 'avatar', 'userType', 'companyName'] as const;
-const USER_INTERNAL_MARKERS = ['resetPasswordToken', 'googleId', 'aiTokensLimit', 'mfaEnabled'];
+const USER_PUBLIC_FIELDS = [
+  "id",
+  "name",
+  "avatar",
+  "userType",
+  "companyName",
+] as const;
+const USER_INTERNAL_MARKERS = [
+  "resetPasswordToken",
+  "googleId",
+  "aiTokensLimit",
+  "mfaEnabled",
+];
 
 export function sanitizeUsersDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeUsersDeep);
-  if (value && typeof value === 'object') {
+  if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
-    if ('email' in obj && USER_INTERNAL_MARKERS.some((k) => k in obj)) {
+    if ("email" in obj && USER_INTERNAL_MARKERS.some((k) => k in obj)) {
       return Object.fromEntries(
         USER_PUBLIC_FIELDS.filter((k) => k in obj).map((k) => [k, obj[k]]),
       );
@@ -72,15 +89,30 @@ export function sanitizeUsersDeep(value: unknown): unknown {
  */
 const NOTES_RE = /(note|notes|comment|remark|memo|הערה|הערות|תיאור)/i;
 const TYPE_HINTS: Array<{ re: RegExp; suggest: string }> = [
-  { re: /(^|[\s_/(-])(date|deadline|due|תאריך|מועד)($|[\s_/)-])/i, suggest: 'date' },
-  { re: /(^|[\s_/(-])(phone|mobile|cell|tel|טלפון|נייד)($|[\s_/)-])/i, suggest: 'phone' },
-  { re: /(e-?mail|אימייל|מייל|דוא"ל)/i, suggest: 'email' },
-  { re: /(^|[\s_/(-])(price|cost|amount|total|מחיר|עלות|סכום)($|[\s_/)-])/i, suggest: 'currency' },
-  { re: /(^|[\s_/(-])(quantity|qty|count|כמות)($|[\s_/)-])/i, suggest: 'number' },
-  { re: /(percent|אחוז|%)/i, suggest: 'number' },
-  { re: /(^|[\s_/(-])(rating|score|דירוג|ציון)($|[\s_/)-])/i, suggest: 'rating' },
-  { re: /(^|[\s_/(-])(status|סטטוס|מצב)($|[\s_/)-])/i, suggest: 'status' },
-  { re: /(^|[\s_/(-])(url|link|קישור)($|[\s_/)-])/i, suggest: 'link' },
+  {
+    re: /(^|[\s_/(-])(date|deadline|due|תאריך|מועד)($|[\s_/)-])/i,
+    suggest: "date",
+  },
+  {
+    re: /(^|[\s_/(-])(phone|mobile|cell|tel|טלפון|נייד)($|[\s_/)-])/i,
+    suggest: "phone",
+  },
+  { re: /(e-?mail|אימייל|מייל|דוא"ל)/i, suggest: "email" },
+  {
+    re: /(^|[\s_/(-])(price|cost|amount|total|מחיר|עלות|סכום)($|[\s_/)-])/i,
+    suggest: "currency",
+  },
+  {
+    re: /(^|[\s_/(-])(quantity|qty|count|כמות)($|[\s_/)-])/i,
+    suggest: "number",
+  },
+  { re: /(percent|אחוז|%)/i, suggest: "number" },
+  {
+    re: /(^|[\s_/(-])(rating|score|דירוג|ציון)($|[\s_/)-])/i,
+    suggest: "rating",
+  },
+  { re: /(^|[\s_/(-])(status|סטטוס|מצב)($|[\s_/)-])/i, suggest: "status" },
+  { re: /(^|[\s_/(-])(url|link|קישור)($|[\s_/)-])/i, suggest: "link" },
 ];
 
 function columnTypeObjection(
@@ -88,7 +120,7 @@ function columnTypeObjection(
   type: string,
   settings?: Record<string, unknown>,
 ): { rejected: string; suggestedType: string; retry: string } | null {
-  if (type === 'text' || type === 'rich_text') {
+  if (type === "text" || type === "rich_text") {
     if (NOTES_RE.test(name)) return null;
     const hint = TYPE_HINTS.find((h) => h.re.test(name));
     if (hint) {
@@ -99,7 +131,10 @@ function columnTypeObjection(
       };
     }
   }
-  if ((type === 'dropdown' || type === 'status') && !(settings as any)?.options?.length) {
+  if (
+    (type === "dropdown" || type === "status") &&
+    !(settings as any)?.options?.length
+  ) {
     return {
       rejected: `${type} column "${name}" has no settings.options — it would render as an empty select.`,
       suggestedType: type,
@@ -109,55 +144,313 @@ function columnTypeObjection(
   return null;
 }
 
+/**
+ * Every tool declares all three hints explicitly.
+ *
+ * A missing hint is not the same as a false one: a client — and a directory
+ * reviewer — cannot tell "this tool does not reach the open internet" from
+ * "nobody said". The three are:
+ *
+ * - readOnlyHint: the call changes nothing.
+ * - destructiveHint: it removes or overwrites something the user would miss.
+ * - openWorldHint: its effect leaves the user's own workspace. True only for
+ *   signing in or up, publishing a page the public can load, an automation
+ *   that may call a URL the user names, and a push delivered through Google.
+ *   Everything else touches only data inside their own organization.
+ */
 const ANNOTATIONS: Record<string, Record<string, unknown>> = {
-  connection_status: { title: 'Check TaskLite connection', readOnlyHint: true },
-  sign_up: { title: 'Create TaskLite account', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  connect: { title: 'Connect or switch TaskLite account', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  login: { title: 'Sign in to TaskLite with email and password', readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  disconnect: { title: 'Disconnect TaskLite account', readOnlyHint: false, destructiveHint: true },
-  list_organizations: { title: 'List organizations', readOnlyHint: true },
-  configure_external_access: { title: 'Configure external user access', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  list_projects: { title: 'List projects', readOnlyHint: true },
-  create_project: { title: 'Create project', readOnlyHint: false, destructiveHint: false },
-  create_board: { title: 'Create board', readOnlyHint: false, destructiveHint: false },
-  create_column: { title: 'Add column', readOnlyHint: false, destructiveHint: false },
-  get_board_schema: { title: 'Read board schema', readOnlyHint: true },
-  update_board: { title: 'Update board', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  delete_board: { title: 'Delete board', readOnlyHint: false, destructiveHint: true },
-  delete_project: { title: 'Delete project', readOnlyHint: false, destructiveHint: true },
-  push_status: { title: 'Push status', readOnlyHint: true },
-  send_test_push: { title: 'Send a test push', readOnlyHint: false },
-  update_column: { title: 'Update column', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  delete_column: { title: 'Delete column', readOnlyHint: false, destructiveHint: true },
-  reorder_columns: { title: 'Reorder columns', readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  query_items: { title: 'List items', readOnlyHint: true },
-  create_item: { title: 'Create item', readOnlyHint: false, destructiveHint: false },
-  update_item: { title: 'Update item', readOnlyHint: false, destructiveHint: false },
-  set_cell: { title: 'Set cell value', readOnlyHint: false, destructiveHint: false },
-  delete_item: { title: 'Delete item', readOnlyHint: false, destructiveHint: true },
-  list_comments: { title: 'List item comments', readOnlyHint: true },
-  add_comment: { title: 'Add a comment to an item', readOnlyHint: false, destructiveHint: false },
-  update_comment: { title: 'Edit a comment', readOnlyHint: false, destructiveHint: false },
-  delete_comment: { title: 'Delete a comment', readOnlyHint: false, destructiveHint: true },
-  create_app: { title: 'Create app', readOnlyHint: false, destructiveHint: false },
-  publish_app: { title: 'Publish app', readOnlyHint: false, destructiveHint: false },
-  create_app_endpoint: { title: 'Create app endpoint', readOnlyHint: false, destructiveHint: false },
-  create_app_api_key: { title: 'Create app API key', readOnlyHint: false, destructiveHint: false },
-  build_backend: { title: 'Build a backend in one call', readOnlyHint: false, destructiveHint: false },
-  list_boards: { title: 'List boards', readOnlyHint: true },
-  list_apps: { title: 'List apps', readOnlyHint: true },
-  list_app_endpoints: { title: 'List app endpoints', readOnlyHint: true },
-  update_app_endpoint: { title: 'Update app endpoint', readOnlyHint: false, destructiveHint: false },
-  get_app_spec: { title: 'Get app spec', readOnlyHint: true },
-  get_frontend_prompt: { title: 'Get frontend prompt', readOnlyHint: true },
-  search: { title: 'Search projects, boards and items', readOnlyHint: true },
-  export_project: { title: 'Export project as JSON', readOnlyHint: true },
-  fetch: { title: 'Fetch one record by id', readOnlyHint: true },
-  deploy_frontend: { title: 'Deploy frontend to TaskLite hosting', readOnlyHint: false, destructiveHint: false },
-  list_deployments: { title: 'List frontend deployments', readOnlyHint: true },
-  rollback_deployment: { title: 'Roll back a frontend deployment', readOnlyHint: false, destructiveHint: false },
-  create_automation: { title: 'Create automation', readOnlyHint: false, destructiveHint: false },
-  list_automations: { title: 'List automations', readOnlyHint: true },
+  connection_status: {
+    title: "Check TaskLite connection",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  sign_up: {
+    title: "Create TaskLite account",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  connect: {
+    title: "Connect or switch TaskLite account",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  login: {
+    title: "Sign in to TaskLite with email and password",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  disconnect: {
+    title: "Disconnect TaskLite account",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  list_organizations: {
+    title: "List organizations",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  configure_external_access: {
+    title: "Configure external user access",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  list_projects: {
+    title: "List projects",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_project: {
+    title: "Create project",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_board: {
+    title: "Create board",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_column: {
+    title: "Add column",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_board_schema: {
+    title: "Read board schema",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  update_board: {
+    title: "Update board",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  delete_board: {
+    title: "Delete board",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  delete_project: {
+    title: "Delete project",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  push_status: {
+    title: "Push status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  send_test_push: {
+    title: "Send a test push",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  update_column: {
+    title: "Update column",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  delete_column: {
+    title: "Delete column",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  reorder_columns: {
+    title: "Reorder columns",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  query_items: {
+    title: "List items",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_item: {
+    title: "Create item",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  update_item: {
+    title: "Update item",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  set_cell: {
+    title: "Set cell value",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  delete_item: {
+    title: "Delete item",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  list_comments: {
+    title: "List item comments",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  add_comment: {
+    title: "Add a comment to an item",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  update_comment: {
+    title: "Edit a comment",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  delete_comment: {
+    title: "Delete a comment",
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false,
+  },
+  create_app: {
+    title: "Create app",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  publish_app: {
+    title: "Publish app",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_app_endpoint: {
+    title: "Create app endpoint",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  create_app_api_key: {
+    title: "Create app API key",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  build_backend: {
+    title: "Build a backend in one call",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  list_boards: {
+    title: "List boards",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  list_apps: {
+    title: "List apps",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  list_app_endpoints: {
+    title: "List app endpoints",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  update_app_endpoint: {
+    title: "Update app endpoint",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_app_spec: {
+    title: "Get app spec",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  get_frontend_prompt: {
+    title: "Get frontend prompt",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  search: {
+    title: "Search projects, boards and items",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  export_project: {
+    title: "Export project as JSON",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  fetch: {
+    title: "Fetch one record by id",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  deploy_frontend: {
+    title: "Deploy frontend to TaskLite hosting",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  list_deployments: {
+    title: "List frontend deployments",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  rollback_deployment: {
+    title: "Roll back a frontend deployment",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  create_automation: {
+    title: "Create automation",
+    readOnlyHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  list_automations: {
+    title: "List automations",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
 };
 
 export function registerTools(
@@ -190,10 +483,10 @@ export function registerTools(
     const orgs = await getApi().writableOrganizations();
     if (orgs.length === 0) {
       throw new Error(
-        `This account has no organization it can write to. Create one at ${getApi().appUrl('/')} or ask an organization admin for access.`,
+        `This account has no organization it can write to. Create one at ${getApi().appUrl("/")} or ask an organization admin for access.`,
       );
     }
-    const named = orgs.map((o) => `"${o.name}" = ${o.id}`).join('; ');
+    const named = orgs.map((o) => `"${o.name}" = ${o.id}`).join("; ");
     throw new Error(
       `This account belongs to ${orgs.length} organizations, so pass organizationId. Candidates: ${named}. If the user did not say which, ask, or pick the one whose name matches the request.`,
     );
@@ -203,22 +496,26 @@ export function registerTools(
 
   if (onboarding) {
     tool(
-      'connection_status',
-      'Check whether this machine is connected to a TaskLite account. Call this first if any tool fails with an auth error.',
+      "connection_status",
+      "Check whether this machine is connected to a TaskLite account. Call this first if any tool fails with an auth error.",
       {},
       async () => {
         if (!onboarding.isConnected()) {
           return ok({
             connected: false,
-            next: 'New user: call sign_up. Existing user: create a key at TaskLite → Integrations → Connect Claude Code, then pass it to the connect tool.',
+            next: "New user: call sign_up. Existing user: create a key at TaskLite → Integrations → Connect Claude Code, then pass it to the connect tool.",
           });
         }
         try {
-          const orgs = await getApi().request<any[]>('GET', '/organizations');
+          const orgs = await getApi().request<any[]>("GET", "/organizations");
           return ok({
             connected: true,
-            organizations: (orgs || []).map((o: any) => ({ id: o.id, name: o.name })),
-            switchAccount: 'To use a different account, call connect with that account’s tl_ key.',
+            organizations: (orgs || []).map((o: any) => ({
+              id: o.id,
+              name: o.name,
+            })),
+            switchAccount:
+              "To use a different account, call connect with that account’s tl_ key.",
           });
         } catch (e) {
           return ok({ connected: false, error: (e as Error).message });
@@ -227,23 +524,31 @@ export function registerTools(
     );
 
     tool(
-      'sign_up',
+      "sign_up",
       'Create a brand-new TaskLite account + organization and connect this machine — no website visit needed. A strong random password is generated locally and never shown or stored; for web access the user later uses "forgot password" with this email. Ask the user for email, their name, and a business name before calling.',
       {
-        email: z.string().email().describe('Email address'),
+        email: z.string().email().describe("Email address"),
         name: z.string().describe("The user's full name"),
-        organizationName: z.string().describe('Business/organization name'),
+        organizationName: z.string().describe("Business/organization name"),
       },
       async ({ email, name, organizationName }) => {
         if (onboarding.isConnected()) {
-          throw new Error('Already connected. Call connection_status to see the current account.');
+          throw new Error(
+            "Already connected. Call connection_status to see the current account.",
+          );
         }
-        const password = `Tl1!${randomBytes(24).toString('base64url')}`;
+        const password = `Tl1!${randomBytes(24).toString("base64url")}`;
         const apiUrl = envApiUrl();
         const res = await fetch(`${apiUrl}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, name, password, organizationName, acceptTerms: true }),
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            name,
+            password,
+            organizationName,
+            acceptTerms: true,
+          }),
         });
         const data: any = await res.json().catch(() => null);
         if (!res.ok) {
@@ -253,9 +558,12 @@ export function registerTools(
         }
         const orgId = data.user?.currentOrganizationId;
         const keyRes = await fetch(`${apiUrl}/api-keys`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
-          body: JSON.stringify({ name: 'claude-code', organizationId: orgId }),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.token}`,
+          },
+          body: JSON.stringify({ name: "claude-code", organizationId: orgId }),
         });
         const keyData: any = await keyRes.json().catch(() => null);
         if (!keyRes.ok || !keyData?.key) {
@@ -276,14 +584,16 @@ export function registerTools(
     );
 
     tool(
-      'connect',
+      "connect",
       'Connect this machine to an existing TaskLite account, or switch to a different one. Takes a personal API key (tl_...) created at TaskLite → Integrations → "Connect Claude Code". Replaces the current connection if there is one — use this to switch user or organization. The switch takes effect immediately; no restart.',
       {
-        apiKey: z.string().describe('Personal TaskLite API key, starts with tl_'),
+        apiKey: z
+          .string()
+          .describe("Personal TaskLite API key, starts with tl_"),
       },
       async ({ apiKey }) => {
         const key = apiKey.trim();
-        if (!key.startsWith('tl_')) {
+        if (!key.startsWith("tl_")) {
           throw new Error(
             'Not a personal API key. Expected a key starting with "tl_" from TaskLite → Integrations → Connect Claude Code. (App keys starting with "tk_" are for calling app endpoints, not for connecting.)',
           );
@@ -293,9 +603,12 @@ export function registerTools(
         const candidate = new TaskLiteApi(key);
         let orgs: any[];
         try {
-          orgs = (await candidate.request<any[]>('GET', '/organizations')) || [];
+          orgs =
+            (await candidate.request<any[]>("GET", "/organizations")) || [];
         } catch (e) {
-          throw new Error(`That key was rejected, nothing changed: ${(e as Error).message}`);
+          throw new Error(
+            `That key was rejected, nothing changed: ${(e as Error).message}`,
+          );
         }
 
         const savedTo = onboarding.save(key);
@@ -309,7 +622,7 @@ export function registerTools(
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  'TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This switch applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.',
+                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This switch applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.",
               }
             : {}),
         });
@@ -317,17 +630,19 @@ export function registerTools(
     );
 
     tool(
-      'login',
+      "login",
       'Connect this machine to an existing TaskLite account with email + password, or switch to a different account. Creates a personal API key named "claude-code" on that account and stores it, so the password is used once and never saved. Replaces the current connection if there is one. Prefer connect when the user already has a tl_ key.',
       {
-        email: z.string().email().describe('Email address'),
-        password: z.string().describe('Used once to mint an API key; never stored'),
+        email: z.string().email().describe("Email address"),
+        password: z
+          .string()
+          .describe("Used once to mint an API key; never stored"),
       },
       async ({ email, password }) => {
         const apiUrl = envApiUrl();
         const res = await fetch(`${apiUrl}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
         });
         const data: any = await res.json().catch(() => null);
@@ -336,7 +651,7 @@ export function registerTools(
           const detail = JSON.stringify(data?.message ?? data).slice(0, 200);
           throw new Error(
             res.status === 429
-              ? 'Too many login attempts (limit is 5 per minute). Wait a minute and try again.'
+              ? "Too many login attempts (limit is 5 per minute). Wait a minute and try again."
               : `Login failed (${res.status}): ${detail}. Nothing changed.`,
           );
         }
@@ -349,9 +664,12 @@ export function registerTools(
 
         const orgId = data?.user?.currentOrganizationId;
         const keyRes = await fetch(`${apiUrl}/api-keys`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
-          body: JSON.stringify({ name: 'claude-code', organizationId: orgId }),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.token}`,
+          },
+          body: JSON.stringify({ name: "claude-code", organizationId: orgId }),
         });
         const keyData: any = await keyRes.json().catch(() => null);
         if (!keyRes.ok || !keyData?.key) {
@@ -361,7 +679,9 @@ export function registerTools(
         }
 
         const api = new TaskLiteApi(keyData.key);
-        const orgs = ((await api.request<any[]>('GET', '/organizations')) || []).map((o: any) => ({
+        const orgs = (
+          (await api.request<any[]>("GET", "/organizations")) || []
+        ).map((o: any) => ({
           id: o.id,
           name: o.name,
         }));
@@ -370,7 +690,11 @@ export function registerTools(
 
         return ok({
           connected: true,
-          account: { id: data.user?.id, email: data.user?.email, name: data.user?.name },
+          account: {
+            id: data.user?.id,
+            email: data.user?.email,
+            name: data.user?.name,
+          },
           organizations: orgs,
           defaultOrganizationId: orgId ?? null,
           credentialsSavedTo: savedTo,
@@ -378,7 +702,7 @@ export function registerTools(
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  'TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This login applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.',
+                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This login applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.",
               }
             : {}),
         });
@@ -386,8 +710,8 @@ export function registerTools(
     );
 
     tool(
-      'disconnect',
-      'Disconnect this machine from TaskLite by forgetting the stored credential. Use before connecting a different account, or to revoke local access. Does not delete anything in TaskLite itself and does not revoke the key server-side.',
+      "disconnect",
+      "Disconnect this machine from TaskLite by forgetting the stored credential. Use before connecting a different account, or to revoke local access. Does not delete anything in TaskLite itself and does not revoke the key server-side.",
       {},
       async () => {
         const had = onboarding.clear();
@@ -396,11 +720,11 @@ export function registerTools(
           connected: false,
           removedStoredCredential: had,
           credentialsPath,
-          next: 'Call connect with another tl_ key to sign in as a different user.',
+          next: "Call connect with another tl_ key to sign in as a different user.",
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  'TASKLITE_API_KEY is still set in this environment. The running server is disconnected, but the next start will reconnect from that env var — remove it from your MCP server config for a real disconnect.',
+                  "TASKLITE_API_KEY is still set in this environment. The running server is disconnected, but the next start will reconnect from that env var — remove it from your MCP server config for a real disconnect.",
               }
             : {}),
         });
@@ -411,149 +735,215 @@ export function registerTools(
   // ── Group A: schema & structure ────────────────────────────────────────────
 
   tool(
-    'list_organizations',
-    'List the organizations the authenticated user belongs to. Use the returned id as organizationId in other tools.',
+    "list_organizations",
+    "List the organizations the authenticated user belongs to. Use the returned id as organizationId in other tools.",
     {},
-    async () => ok(await getApi().request('GET', '/organizations')),
+    async () => ok(await getApi().request("GET", "/organizations")),
   );
 
   tool(
-    'configure_external_access',
+    "configure_external_access",
     'Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: "open" — in at once; "approval" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); "closed" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the "Log in" button in the approval email, so set it whenever you deploy an app that uses this flow; pass "" to clear. Call with no changes to just read the current settings. Requires organization admin.',
     {
-      organizationId: z.string().optional().describe('Defaults to the credential organization'),
-      registrationPolicy: z.enum(['closed', 'approval', 'open']).optional().describe('How external sign-ups are admitted: open, approval or closed'),
+      organizationId: z
+        .string()
+        .optional()
+        .describe("Defaults to the credential organization"),
+      registrationPolicy: z
+        .enum(["closed", "approval", "open"])
+        .optional()
+        .describe(
+          "How external sign-ups are admitted: open, approval or closed",
+        ),
       appLoginUrl: z
         .string()
         .optional()
-        .describe("https URL of your app's login page for external users; \"\" clears it"),
+        .describe(
+          'https URL of your app\'s login page for external users; "" clears it',
+        ),
     },
     async ({ organizationId, registrationPolicy, appLoginUrl }) => {
       const orgId = await resolveOrg(organizationId);
       const settings: Record<string, unknown> = {};
-      if (registrationPolicy !== undefined) settings.externalRegistrationPolicy = registrationPolicy;
+      if (registrationPolicy !== undefined)
+        settings.externalRegistrationPolicy = registrationPolicy;
       if (appLoginUrl !== undefined) {
         const value = appLoginUrl.trim();
         if (value && !/^https?:\/\/\S+$/i.test(value)) {
-          throw new Error('appLoginUrl must be an absolute http(s) URL, e.g. https://app.example.com/login');
+          throw new Error(
+            "appLoginUrl must be an absolute http(s) URL, e.g. https://app.example.com/login",
+          );
         }
         settings.externalAppUrl = value;
       }
       const org =
         Object.keys(settings).length > 0
-          ? await getApi().request<any>('PATCH', `/organizations/${orgId}`, { settings })
-          : await getApi().request<any>('GET', `/organizations/${orgId}`);
+          ? await getApi().request<any>("PATCH", `/organizations/${orgId}`, {
+              settings,
+            })
+          : await getApi().request<any>("GET", `/organizations/${orgId}`);
       const current = (org && org.settings) || {};
       return ok({
         organizationId: orgId,
-        registrationPolicy: current.externalRegistrationPolicy || 'closed',
+        registrationPolicy: current.externalRegistrationPolicy || "closed",
         appLoginUrl: current.externalAppUrl || null,
         approvalsUrl: `${envAppUrl()}/organization/settings`,
         signupEndpoint: `${envApiUrl()}/auth/register-external`,
         loginEndpoint: `${envApiUrl()}/auth/login`,
         note:
-          (current.externalRegistrationPolicy || 'closed') === 'approval'
-            ? 'Each signup waits for an admin; admins are emailed with a link to approvalsUrl, and the user is emailed (with appLoginUrl as the button) once approved.'
-            : (current.externalRegistrationPolicy || 'closed') === 'open'
-              ? 'Signups are active immediately.'
-              : 'Self-signup is refused; external users are created by an admin.',
+          (current.externalRegistrationPolicy || "closed") === "approval"
+            ? "Each signup waits for an admin; admins are emailed with a link to approvalsUrl, and the user is emailed (with appLoginUrl as the button) once approved."
+            : (current.externalRegistrationPolicy || "closed") === "open"
+              ? "Signups are active immediately."
+              : "Self-signup is refused; external users are created by an admin.",
       });
     },
   );
 
   tool(
-    'list_projects',
-    'List projects in an organization. The API returns 50 per page — an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.',
+    "list_projects",
+    "List projects in an organization. The API returns 50 per page — an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
     {
-      organizationId: z.string().optional().describe('Defaults to the credential organization'),
-      page: z.number().optional().describe('1-based; defaults to 1'),
-      limit: z.number().optional().describe('Defaults to 50'),
+      organizationId: z
+        .string()
+        .optional()
+        .describe("Defaults to the credential organization"),
+      page: z.number().optional().describe("1-based; defaults to 1"),
+      limit: z.number().optional().describe("Defaults to 50"),
     },
     async ({ organizationId, page, limit }) => {
       const orgId = await resolveOrg(organizationId);
       const qs = new URLSearchParams();
-      if (page) qs.set('page', String(page));
-      if (limit) qs.set('limit', String(limit));
-      const suffix = qs.toString() ? `?${qs}` : '';
-      return ok(await getApi().request('GET', `/organizations/${orgId}/projects${suffix}`));
+      if (page) qs.set("page", String(page));
+      if (limit) qs.set("limit", String(limit));
+      const suffix = qs.toString() ? `?${qs}` : "";
+      return ok(
+        await getApi().request(
+          "GET",
+          `/organizations/${orgId}/projects${suffix}`,
+        ),
+      );
     },
   );
 
   tool(
-    'list_boards',
-    'List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.',
+    "list_boards",
+    "List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      page: z.number().optional().describe('1-based; defaults to 1'),
-      limit: z.number().optional().describe('Defaults to 50'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      page: z.number().optional().describe("1-based; defaults to 1"),
+      limit: z.number().optional().describe("Defaults to 50"),
     },
     async ({ projectId, page, limit }) => {
       const qs = new URLSearchParams();
-      if (page) qs.set('page', String(page));
-      if (limit) qs.set('limit', String(limit));
-      const suffix = qs.toString() ? `?${qs}` : '';
-      return ok(await getApi().request('GET', `/projects/${projectId}/boards${suffix}`));
+      if (page) qs.set("page", String(page));
+      if (limit) qs.set("limit", String(limit));
+      const suffix = qs.toString() ? `?${qs}` : "";
+      return ok(
+        await getApi().request("GET", `/projects/${projectId}/boards${suffix}`),
+      );
     },
   );
 
   tool(
-    'create_project',
-    'Create a project (a business process container). Boards with data live inside projects.',
+    "create_project",
+    "Create a project (a business process container). Boards with data live inside projects.",
     {
-      name: z.string().describe('Human-readable name'),
-      description: z.string().optional().describe('Free-text description'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      name: z.string().describe("Human-readable name"),
+      description: z.string().optional().describe("Free-text description"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ name, description, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
-      const project = await getApi().request<any>('POST', `/organizations/${orgId}/projects`, {
-        name,
-        organizationId: orgId,
-        ...(description ? { description } : {}),
+      const project = await getApi().request<any>(
+        "POST",
+        `/organizations/${orgId}/projects`,
+        {
+          name,
+          organizationId: orgId,
+          ...(description ? { description } : {}),
+        },
+      );
+      return ok({
+        project,
+        adminUrl: getApi().appUrl(`/projects/${project.id}`),
       });
-      return ok({ project, adminUrl: getApi().appUrl(`/projects/${project.id}`) });
     },
   );
 
   tool(
-    'create_board',
+    "create_board",
     'Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: "tasks" (default) also gives the board the built-in task columns — status, priority, assignee, due date, tags — for work people track; "data" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).',
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      name: z.string().describe('Human-readable name'),
-      description: z.string().optional().describe('Free-text description'),
-      kind: z.enum(['tasks', 'data']).optional().describe('"tasks": with the built-in task columns (status, priority, assignee, due date, tags). "data": only the columns you add. Default tasks.'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      name: z.string().describe("Human-readable name"),
+      description: z.string().optional().describe("Free-text description"),
+      kind: z
+        .enum(["tasks", "data"])
+        .optional()
+        .describe(
+          '"tasks": with the built-in task columns (status, priority, assignee, due date, tags). "data": only the columns you add. Default tasks.',
+        ),
     },
     async ({ projectId, name, description, kind }) => {
-      const board = await getApi().request<any>('POST', `/projects/${projectId}/boards`, {
-        name,
-        projectId,
-        ...(description ? { description } : {}),
-        ...(kind ? { kind } : {}),
+      const board = await getApi().request<any>(
+        "POST",
+        `/projects/${projectId}/boards`,
+        {
+          name,
+          projectId,
+          ...(description ? { description } : {}),
+          ...(kind ? { kind } : {}),
+        },
+      );
+      return ok({
+        board,
+        adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${board.id}`),
       });
-      return ok({ board, adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${board.id}`) });
     },
   );
 
   tool(
-    'create_column',
-    'Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.',
+    "create_column",
+    "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      name: z.string().describe('Human-readable name'),
-      type: z.string().describe('Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      name: z.string().describe("Human-readable name"),
+      type: z
+        .string()
+        .describe(
+          "Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file",
+        ),
       settings: z
         .record(z.any())
         .optional()
         .describe(
           'Type-specific settings. For dropdown/status/priority: options, either as labels ["A","B"] or as full objects [{value,label,color}] — labels are expanded server-side, and colors are assigned if you do not supply them.',
         ),
-      isRequired: z.boolean().optional().describe('Require a non-blank value on every App API create'),
+      isRequired: z
+        .boolean()
+        .optional()
+        .describe("Require a non-blank value on every App API create"),
       force: z
         .boolean()
         .optional()
-        .describe('Create the column even when the name suggests a different type'),
+        .describe(
+          "Create the column even when the name suggests a different type",
+        ),
     },
     async ({ projectId, boardId, name, type, settings, isRequired, force }) => {
       // The corrective loop: a model asking for text where the name announces
@@ -566,7 +956,7 @@ export function registerTools(
         if (objection) return ok({ created: false, ...objection });
       }
       const column = await getApi().request<any>(
-        'POST',
+        "POST",
         `/projects/${projectId}/boards/${boardId}/columns`,
         {
           name,
@@ -580,13 +970,23 @@ export function registerTools(
   );
 
   tool(
-    'get_board_schema',
-    'Get a board with its full column schema (ids, names, types, settings). Call this before creating items with cells.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
+    "get_board_schema",
+    "Get a board with its full column schema (ids, names, types, settings). Call this before creating items with cells.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+    },
     async ({ projectId, boardId }) => {
       const [board, columns] = await Promise.all([
-        getApi().request('GET', `/projects/${projectId}/boards/${boardId}`),
-        getApi().request('GET', `/projects/${projectId}/boards/${boardId}/columns`),
+        getApi().request("GET", `/projects/${projectId}/boards/${boardId}`),
+        getApi().request(
+          "GET",
+          `/projects/${projectId}/boards/${boardId}/columns`,
+        ),
       ]);
       return ok({ board, columns });
     },
@@ -595,111 +995,226 @@ export function registerTools(
   // ── Group B: data ──────────────────────────────────────────────────────────
 
   tool(
-    'update_board',
-    'Rename a board or change its description. Structure (columns) is changed with update_column / delete_column / reorder_columns.',
+    "update_board",
+    "Rename a board or change its description. Structure (columns) is changed with update_column / delete_column / reorder_columns.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      name: z.string().optional().describe('Human-readable name'),
-      description: z.string().optional().describe('Free-text description'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      name: z.string().optional().describe("Human-readable name"),
+      description: z.string().optional().describe("Free-text description"),
     },
     async ({ projectId, boardId, ...rest }) => {
-      const body = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
-      return ok(await getApi().request('PATCH', `/projects/${projectId}/boards/${boardId}`, body));
+      const body = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== undefined),
+      );
+      return ok(
+        await getApi().request(
+          "PATCH",
+          `/projects/${projectId}/boards/${boardId}`,
+          body,
+        ),
+      );
     },
   );
 
   tool(
-    'delete_board',
-    'Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
+    "delete_board",
+    "Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+    },
     async ({ projectId, boardId }) => {
-      await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}`);
+      await getApi().request(
+        "DELETE",
+        `/projects/${projectId}/boards/${boardId}`,
+      );
       return ok({ deleted: true, boardId });
     },
   );
 
   tool(
-    'delete_project',
-    'Delete a project with every board, column and row inside it. Destructive: confirm with the user first, and name the project in the confirmation. The project goes to the organization recycle bin, so it can be restored from the admin until it is emptied.',
+    "delete_project",
+    "Delete a project with every board, column and row inside it. Destructive: confirm with the user first, and name the project in the confirmation. The project goes to the organization recycle bin, so it can be restored from the admin until it is emptied.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
-    async ({ projectId, organizationId }: { projectId: string; organizationId?: string }) => {
+    async ({
+      projectId,
+      organizationId,
+    }: {
+      projectId: string;
+      organizationId?: string;
+    }) => {
       const orgId = await resolveOrg(organizationId);
-      await getApi().request('DELETE', `/organizations/${orgId}/projects/${projectId}`);
+      await getApi().request(
+        "DELETE",
+        `/organizations/${orgId}/projects/${projectId}`,
+      );
       return ok({
         deleted: true,
         projectId,
-        note: 'In the recycle bin. An organization admin can restore it, or empty the bin to remove it for good.',
+        note: "In the recycle bin. An organization admin can restore it, or empty the bin to remove it for good.",
       });
     },
   );
 
   tool(
-    'update_column',
-    'Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.',
+    "update_column",
+    "Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      columnId: z.string().describe('Column id (from get_board_schema)'),
-      name: z.string().optional().describe('Human-readable name'),
-      type: z.string().optional().describe('New column type (same list as create_column)'),
-      settings: z.record(z.unknown()).optional().describe('Replaces the column settings, e.g. { options: [...] } for dropdown/status'),
-      isRequired: z.boolean().optional().describe('Require a non-blank value on every App API create'),
-      isHidden: z.boolean().optional().describe('Hide the column in the TaskLite UI'),
-      description: z.string().optional().describe('Free-text description'),
-      force: z.boolean().optional().describe('Skip the name/type sanity check'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      columnId: z.string().describe("Column id (from get_board_schema)"),
+      name: z.string().optional().describe("Human-readable name"),
+      type: z
+        .string()
+        .optional()
+        .describe("New column type (same list as create_column)"),
+      settings: z
+        .record(z.unknown())
+        .optional()
+        .describe(
+          "Replaces the column settings, e.g. { options: [...] } for dropdown/status",
+        ),
+      isRequired: z
+        .boolean()
+        .optional()
+        .describe("Require a non-blank value on every App API create"),
+      isHidden: z
+        .boolean()
+        .optional()
+        .describe("Hide the column in the TaskLite UI"),
+      description: z.string().optional().describe("Free-text description"),
+      force: z.boolean().optional().describe("Skip the name/type sanity check"),
     },
     async ({ projectId, boardId, columnId, force, ...rest }) => {
-      const body = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+      const body = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== undefined),
+      );
       if (!force && (body.type || body.name)) {
         // Sanity-check the resulting name/type pair the same way create_column does.
-        const cols = await getApi().request<any>('GET', `/projects/${projectId}/boards/${boardId}/columns`);
-        const list: any[] = Array.isArray(cols) ? cols : (cols?.items ?? cols?.data ?? []);
+        const cols = await getApi().request<any>(
+          "GET",
+          `/projects/${projectId}/boards/${boardId}/columns`,
+        );
+        const list: any[] = Array.isArray(cols)
+          ? cols
+          : (cols?.items ?? cols?.data ?? []);
         const current = list.find((c) => c.id === columnId);
         const name = (body.name as string | undefined) ?? current?.name;
         const type = (body.type as string | undefined) ?? current?.type;
         if (name && type) {
-          const hint = columnTypeObjection(name, type, body.settings ?? current?.settings);
+          const hint = columnTypeObjection(
+            name,
+            type,
+            body.settings ?? current?.settings,
+          );
           if (hint) return ok(hint);
         }
       }
-      return ok(await getApi().request('PATCH', `/projects/${projectId}/boards/${boardId}/columns/${columnId}`, body));
+      return ok(
+        await getApi().request(
+          "PATCH",
+          `/projects/${projectId}/boards/${boardId}/columns/${columnId}`,
+          body,
+        ),
+      );
     },
   );
 
   tool(
-    'delete_column',
-    'Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), columnId: z.string().describe('Column id (from get_board_schema)') },
+    "delete_column",
+    "Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      columnId: z.string().describe("Column id (from get_board_schema)"),
+    },
     async ({ projectId, boardId, columnId }) => {
-      await getApi().request('DELETE', `/projects/${projectId}/boards/${boardId}/columns/${columnId}`);
+      await getApi().request(
+        "DELETE",
+        `/projects/${projectId}/boards/${boardId}/columns/${columnId}`,
+      );
       return ok({ deleted: true, columnId });
     },
   );
 
   tool(
-    'reorder_columns',
-    'Set the display order of a board\'s columns. Pass every column id in the wanted order (get_board_schema lists them).',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), columnIds: z.array(z.string()).min(1).describe('Column ids in the new order (every column of the board)') },
+    "reorder_columns",
+    "Set the display order of a board's columns. Pass every column id in the wanted order (get_board_schema lists them).",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      columnIds: z
+        .array(z.string())
+        .min(1)
+        .describe("Column ids in the new order (every column of the board)"),
+    },
     async ({ projectId, boardId, columnIds }) => {
-      return ok(await getApi().request('PUT', `/projects/${projectId}/boards/${boardId}/columns/reorder`, { columnIds }));
+      return ok(
+        await getApi().request(
+          "PUT",
+          `/projects/${projectId}/boards/${boardId}/columns/reorder`,
+          { columnIds },
+        ),
+      );
     },
   );
 
   tool(
-    'export_project',
-    'The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model\'s sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.',
+    "export_project",
+    "The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      organizationId: z.string().optional().describe('Defaults to the credential organization'),
-      maxItemsPerBoard: z.number().int().positive().max(2000).optional().describe('Default 200'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe("Defaults to the credential organization"),
+      maxItemsPerBoard: z
+        .number()
+        .int()
+        .positive()
+        .max(2000)
+        .optional()
+        .describe("Default 200"),
     },
     async ({ projectId, organizationId, maxItemsPerBoard }) => {
       const orgId = await resolveOrg(organizationId);
-      const data = await getApi().request<any>('GET', `/organizations/${orgId}/projects/${projectId}/export.json`);
+      const data = await getApi().request<any>(
+        "GET",
+        `/organizations/${orgId}/projects/${projectId}/export.json`,
+      );
       const cap = maxItemsPerBoard ?? 200;
       let truncated = false;
       for (const b of data?.boards ?? []) {
@@ -712,40 +1227,95 @@ export function registerTools(
       return ok({
         ...data,
         ...(truncated
-          ? { note: `Some boards were cut to ${cap} items; the REST endpoint returns them all.` }
+          ? {
+              note: `Some boards were cut to ${cap} items; the REST endpoint returns them all.`,
+            }
           : {}),
       });
     },
   );
 
   tool(
-    'query_items',
-    'List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.',
+    "query_items",
+    "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      search: z.string().optional().describe('Free text; matches the row title and its text cells'),
-      status: z.string().optional().describe('Only rows with one of these statuses, comma separated: "todo,in_progress" (task boards only)'),
-      priority: z.string().optional().describe('Only rows with one of these priorities, comma separated (task boards only)'),
-      sort: z.string().optional().describe('Sort by title, createdAt, updatedAt or status; prefix with "-" for descending, e.g. "-createdAt". Anything else keeps the board order'),
-      archived: z.enum(['active', 'archived', 'all']).optional().describe('Which rows to include. Default active'),
-      limit: z.number().int().positive().max(500).optional().describe('Page size; omit to fetch all items'),
-      page: z.number().int().positive().optional().describe('1-based page, only with limit'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      search: z
+        .string()
+        .optional()
+        .describe("Free text; matches the row title and its text cells"),
+      status: z
+        .string()
+        .optional()
+        .describe(
+          'Only rows with one of these statuses, comma separated: "todo,in_progress" (task boards only)',
+        ),
+      priority: z
+        .string()
+        .optional()
+        .describe(
+          "Only rows with one of these priorities, comma separated (task boards only)",
+        ),
+      sort: z
+        .string()
+        .optional()
+        .describe(
+          'Sort by title, createdAt, updatedAt or status; prefix with "-" for descending, e.g. "-createdAt". Anything else keeps the board order',
+        ),
+      archived: z
+        .enum(["active", "archived", "all"])
+        .optional()
+        .describe("Which rows to include. Default active"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(500)
+        .optional()
+        .describe("Page size; omit to fetch all items"),
+      page: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("1-based page, only with limit"),
     },
-    async ({ projectId, boardId, search, status, priority, sort, archived, limit, page }: {
-      projectId: string; boardId: string; search?: string; status?: string;
-      priority?: string; sort?: string; archived?: string; limit?: number; page?: number;
+    async ({
+      projectId,
+      boardId,
+      search,
+      status,
+      priority,
+      sort,
+      archived,
+      limit,
+      page,
+    }: {
+      projectId: string;
+      boardId: string;
+      search?: string;
+      status?: string;
+      priority?: string;
+      sort?: string;
+      archived?: string;
+      limit?: number;
+      page?: number;
     }) => {
       const base = `/projects/${projectId}/boards/${boardId}/items`;
       const filters = new URLSearchParams();
-      if (search) filters.set('search', search);
-      if (status) filters.set('status', status);
-      if (priority) filters.set('priority', priority);
-      if (archived) filters.set('archiveFilter', archived);
+      if (search) filters.set("search", search);
+      if (status) filters.set("status", status);
+      if (priority) filters.set("priority", priority);
+      if (archived) filters.set("archiveFilter", archived);
       if (sort) {
-        const desc = sort.startsWith('-');
-        filters.set('sortField', desc ? sort.slice(1) : sort);
-        filters.set('sortDirection', desc ? 'DESC' : 'ASC');
+        const desc = sort.startsWith("-");
+        filters.set("sortField", desc ? sort.slice(1) : sort);
+        filters.set("sortDirection", desc ? "DESC" : "ASC");
       }
       const extra = filters.toString();
       // A row of a data board is a record, not a task: the App API already
@@ -754,20 +1324,38 @@ export function registerTools(
       // task machinery on a customer or an invoice.
       let plain = false;
       try {
-        const board = await getApi().request<any>('GET', `/projects/${projectId}/boards/${boardId}`);
-        plain = board?.metadata?.kind === 'data';
+        const board = await getApi().request<any>(
+          "GET",
+          `/projects/${projectId}/boards/${boardId}`,
+        );
+        plain = board?.metadata?.kind === "data";
       } catch {
         // Cannot read the board: return the rows unchanged rather than fail.
       }
       const TASK_FIELDS = [
-        'status', 'priority', 'dueDate', 'startDate', 'assignedTo', 'tags',
-        'isCompleted', 'completedAt', 'subtaskProgress', 'isTimerActive',
-        'timerStartedAt', 'totalTimeSpent', 'isRecurring', 'recurrencePattern',
-        'recurrenceEndDate', 'parentId', 'aiGenerated', 'livingTaskStatus',
-        'estimatedHours', 'actualHours',
+        "status",
+        "priority",
+        "dueDate",
+        "startDate",
+        "assignedTo",
+        "tags",
+        "isCompleted",
+        "completedAt",
+        "subtaskProgress",
+        "isTimerActive",
+        "timerStartedAt",
+        "totalTimeSpent",
+        "isRecurring",
+        "recurrencePattern",
+        "recurrenceEndDate",
+        "parentId",
+        "aiGenerated",
+        "livingTaskStatus",
+        "estimatedHours",
+        "actualHours",
       ] as const;
       const strip = (row: unknown): unknown => {
-        if (!plain || !row || typeof row !== 'object') return row;
+        if (!plain || !row || typeof row !== "object") return row;
         const out = { ...(row as Record<string, unknown>) };
         for (const f of TASK_FIELDS) delete out[f];
         return out;
@@ -776,24 +1364,30 @@ export function registerTools(
         if (!plain) return res;
         if (Array.isArray(res)) return res.map(strip);
         const o = res as { items?: unknown[]; data?: unknown[] } | null;
-        if (o && Array.isArray(o.items)) return { ...o, items: o.items.map(strip) };
-        if (o && Array.isArray(o.data)) return { ...o, data: o.data.map(strip) };
+        if (o && Array.isArray(o.items))
+          return { ...o, items: o.items.map(strip) };
+        if (o && Array.isArray(o.data))
+          return { ...o, data: o.data.map(strip) };
         return res;
       };
       if (limit) {
         const qs = new URLSearchParams({ limit: String(limit) });
-        if (page) qs.set('page', String(page));
-        const url = `${base}?${qs.toString()}${extra ? `&${extra}` : ''}`;
-        return ok(stripAll(await getApi().request('GET', url)));
+        if (page) qs.set("page", String(page));
+        const url = `${base}?${qs.toString()}${extra ? `&${extra}` : ""}`;
+        return ok(stripAll(await getApi().request("GET", url)));
       }
       // No explicit paging: fetch everything in 200-item pages and concatenate.
       const all: unknown[] = [];
       for (let p = 1; p <= 50; p++) {
-        const res = await getApi().request('GET', `${base}?limit=200&page=${p}${extra ? `&${extra}` : ''}`);
+        const res = await getApi().request(
+          "GET",
+          `${base}?limit=200&page=${p}${extra ? `&${extra}` : ""}`,
+        );
         const batch = Array.isArray(res)
           ? res
           : ((res as { items?: unknown[]; data?: unknown[] })?.items ??
-             (res as { data?: unknown[] })?.data ?? []);
+            (res as { data?: unknown[] })?.data ??
+            []);
         all.push(...batch);
         if (batch.length < 200) break;
       }
@@ -802,41 +1396,88 @@ export function registerTools(
   );
 
   tool(
-    'create_item',
-    'Create an item (row) with all of its data in one call. cells maps columnId -> value (use get_board_schema for column ids); every cell is saved with the row. Use set_cell only for later edits.',
+    "create_item",
+    "Create an item (row) with all of its data in one call. cells maps columnId -> value (use get_board_schema for column ids); every cell is saved with the row. Use set_cell only for later edits.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      title: z.string().describe('Item title, shown as the row name'),
-      description: z.string().optional().describe('Free-text description'),
-      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board\'s status options)'),
-      priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
-      dueDate: z.string().optional().describe('ISO date'),
-      tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
-      cells: z.record(z.any()).optional().describe('Cell values keyed by column id: { "<columnId>": value }. Scalars, { amount, currency } for currency, { relatedItemIds: [...] } for relations'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      title: z.string().describe("Item title, shown as the row name"),
+      description: z.string().optional().describe("Free-text description"),
+      status: z
+        .string()
+        .optional()
+        .describe(
+          "Status value (todo, in_progress, done, or a value from the board's status options)",
+        ),
+      priority: z
+        .string()
+        .optional()
+        .describe("Priority: low, medium, high or urgent"),
+      dueDate: z.string().optional().describe("ISO date"),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("Tags as an array of strings"),
+      cells: z
+        .record(z.any())
+        .optional()
+        .describe(
+          'Cell values keyed by column id: { "<columnId>": value }. Scalars, { amount, currency } for currency, { relatedItemIds: [...] } for relations',
+        ),
     },
     async ({ projectId, boardId, ...body }) =>
-      ok(await getApi().request('POST', `/projects/${projectId}/boards/${boardId}/items`, body)),
+      ok(
+        await getApi().request(
+          "POST",
+          `/projects/${projectId}/boards/${boardId}/items`,
+          body,
+        ),
+      ),
   );
 
   tool(
-    'update_item',
-    'Update item fields (title, description, status, priority, dueDate, tags).',
+    "update_item",
+    "Update item fields (title, description, status, priority, dueDate, tags).",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      itemId: z.string().describe('Item (row) id'),
-      title: z.string().optional().describe('Item title, shown as the row name'),
-      description: z.string().optional().describe('Free-text description'),
-      status: z.string().optional().describe('Status value (todo, in_progress, done, or a value from the board\'s status options)'),
-      priority: z.string().optional().describe('Priority: low, medium, high or urgent'),
-      dueDate: z.string().optional().describe('Due date, ISO 8601 (YYYY-MM-DD or full timestamp)'),
-      tags: z.array(z.string()).optional().describe('Tags as an array of strings'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      itemId: z.string().describe("Item (row) id"),
+      title: z
+        .string()
+        .optional()
+        .describe("Item title, shown as the row name"),
+      description: z.string().optional().describe("Free-text description"),
+      status: z
+        .string()
+        .optional()
+        .describe(
+          "Status value (todo, in_progress, done, or a value from the board's status options)",
+        ),
+      priority: z
+        .string()
+        .optional()
+        .describe("Priority: low, medium, high or urgent"),
+      dueDate: z
+        .string()
+        .optional()
+        .describe("Due date, ISO 8601 (YYYY-MM-DD or full timestamp)"),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("Tags as an array of strings"),
     },
     async ({ projectId, boardId, itemId, ...body }) =>
       ok(
         await getApi().request(
-          'PATCH',
+          "PATCH",
           `/projects/${projectId}/boards/${boardId}/items/${itemId}`,
           body,
         ),
@@ -844,13 +1485,17 @@ export function registerTools(
   );
 
   tool(
-    'set_cell',
-    'Set a single cell value on an item by columnId.',
+    "set_cell",
+    "Set a single cell value on an item by columnId.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      itemId: z.string().describe('Item (row) id'),
-      columnId: z.string().describe('Column id (from get_board_schema)'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      itemId: z.string().describe("Item (row) id"),
+      columnId: z.string().describe("Column id (from get_board_schema)"),
       value: z
         .union([
           z.string(),
@@ -860,12 +1505,12 @@ export function registerTools(
           z.array(z.unknown()),
           z.record(z.unknown()),
         ])
-        .describe('The new cell value; shape depends on the column type'),
+        .describe("The new cell value; shape depends on the column type"),
     },
     async ({ projectId, boardId, itemId, columnId, value }) =>
       ok(
         await getApi().request(
-          'PUT',
+          "PUT",
           `/projects/${projectId}/boards/${boardId}/items/${itemId}/cells/by-column/${columnId}`,
           { value },
         ),
@@ -873,13 +1518,21 @@ export function registerTools(
   );
 
   tool(
-    'delete_item',
-    'Delete an item. Destructive — confirm with the user before calling.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)'), itemId: z.string().describe('Item id (from query_items / create_item)') },
+    "delete_item",
+    "Delete an item. Destructive — confirm with the user before calling.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      itemId: z.string().describe("Item id (from query_items / create_item)"),
+    },
     async ({ projectId, boardId, itemId }) =>
       ok(
         await getApi().request(
-          'DELETE',
+          "DELETE",
           `/projects/${projectId}/boards/${boardId}/items/${itemId}`,
         ),
       ),
@@ -888,22 +1541,35 @@ export function registerTools(
   // ── Group B2: comments (the item's correspondence thread) ──────────────────
 
   tool(
-    'list_comments',
-    'List the comments (the correspondence thread) on an item, oldest first. Each comment includes its author and any @mentions. Needs projectId and itemId (get itemId from query_items).',
+    "list_comments",
+    "List the comments (the correspondence thread) on an item, oldest first. Each comment includes its author and any @mentions. Needs projectId and itemId (get itemId from query_items).",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      itemId: z.string().describe('Item (row) id'),
-      page: z.number().int().positive().optional().describe('1-based page, default 1'),
-      limit: z.number().int().positive().max(100).optional().describe('Page size, default 20'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      itemId: z.string().describe("Item (row) id"),
+      page: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("1-based page, default 1"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(100)
+        .optional()
+        .describe("Page size, default 20"),
     },
     async ({ projectId, itemId, page, limit }) => {
       const qs = new URLSearchParams();
-      if (page) qs.set('page', String(page));
-      if (limit) qs.set('limit', String(limit));
-      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      if (page) qs.set("page", String(page));
+      if (limit) qs.set("limit", String(limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
       return ok(
         await getApi().request(
-          'GET',
+          "GET",
           `/projects/${projectId}/items/${itemId}/comments${suffix}`,
         ),
       );
@@ -911,25 +1577,27 @@ export function registerTools(
   );
 
   tool(
-    'add_comment',
+    "add_comment",
     "Post a comment on an item's thread. To notify people, pass their user ids in mentionedUserIds (each also appears as an @mention). attachmentIds references already-uploaded files. Needs projectId and itemId.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      itemId: z.string().describe('Item (row) id'),
-      content: z.string().describe('The comment text'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      itemId: z.string().describe("Item (row) id"),
+      content: z.string().describe("The comment text"),
       mentionedUserIds: z
         .array(z.string())
         .optional()
-        .describe('User ids to @mention and notify'),
+        .describe("User ids to @mention and notify"),
       attachmentIds: z
         .array(z.string())
         .optional()
-        .describe('Ids of already-uploaded attachments to link'),
+        .describe("Ids of already-uploaded attachments to link"),
     },
     async ({ projectId, itemId, content, mentionedUserIds, attachmentIds }) =>
       ok(
         await getApi().request(
-          'POST',
+          "POST",
           `/projects/${projectId}/items/${itemId}/comments`,
           {
             content,
@@ -941,18 +1609,20 @@ export function registerTools(
   );
 
   tool(
-    'update_comment',
-    'Edit the text of an existing comment. Only the author can edit their comment. Needs projectId, itemId and the commentId.',
+    "update_comment",
+    "Edit the text of an existing comment. Only the author can edit their comment. Needs projectId, itemId and the commentId.",
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      itemId: z.string().describe('Item (row) id'),
-      commentId: z.string().describe('Comment id (from list_comments)'),
-      content: z.string().describe('The new comment text'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      itemId: z.string().describe("Item (row) id"),
+      commentId: z.string().describe("Comment id (from list_comments)"),
+      content: z.string().describe("The new comment text"),
     },
     async ({ projectId, itemId, commentId, content }) =>
       ok(
         await getApi().request(
-          'PATCH',
+          "PATCH",
           `/projects/${projectId}/items/${itemId}/comments/${commentId}`,
           { content },
         ),
@@ -960,13 +1630,21 @@ export function registerTools(
   );
 
   tool(
-    'delete_comment',
-    'Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), itemId: z.string().describe('Item id (from query_items / create_item)'), commentId: z.string().describe('Comment id (from list_comments / add_comment)') },
+    "delete_comment",
+    "Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      itemId: z.string().describe("Item id (from query_items / create_item)"),
+      commentId: z
+        .string()
+        .describe("Comment id (from list_comments / add_comment)"),
+    },
     async ({ projectId, itemId, commentId }) =>
       ok(
         await getApi().request(
-          'DELETE',
+          "DELETE",
           `/projects/${projectId}/items/${itemId}/comments/${commentId}`,
         ),
       ),
@@ -975,44 +1653,75 @@ export function registerTools(
   // ── Group C: app layer (the backend of an external frontend) ───────────────
 
   tool(
-    'create_app',
-    'Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.',
-    { name: z.string().describe('Human-readable name'), projectId: z.string().describe('Project id (from list_projects / create_project)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "create_app",
+    "Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
+    {
+      name: z.string().describe("Human-readable name"),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ name, projectId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
-      const app = await getApi().request<any>('POST', `/organizations/${orgId}/apps`, {
-        name,
-        projectId,
-      });
+      const app = await getApi().request<any>(
+        "POST",
+        `/organizations/${orgId}/apps`,
+        {
+          name,
+          projectId,
+        },
+      );
       return ok({ app, adminUrl: getApi().appUrl(`/apps/${app.id}`) });
     },
   );
 
   tool(
-    'push_status',
-    'Whether an app can send push notifications to phones, and how many devices are registered. Push goes out through the customer\'s OWN Firebase project, so it has to be configured once per app before send_push automations do anything. This tool never returns the key.',
+    "push_status",
+    "Whether an app can send push notifications to phones, and how many devices are registered. Push goes out through the customer's OWN Firebase project, so it has to be configured once per app before send_push automations do anything. This tool never returns the key.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
-    async ({ appId, organizationId }: { appId: string; organizationId?: string }) => {
+    async ({
+      appId,
+      organizationId,
+    }: {
+      appId: string;
+      organizationId?: string;
+    }) => {
       const orgId = await resolveOrg(organizationId);
-      const status = await getApi().request<any>('GET', `/organizations/${orgId}/apps/${appId}/push`);
+      const status = await getApi().request<any>(
+        "GET",
+        `/organizations/${orgId}/apps/${appId}/push`,
+      );
       return ok({
         ...status,
         ...(status?.configured
           ? {}
           : {
               howToConfigure:
-                'Push is not set up for this app. It needs the customer\'s own Firebase service account, which is a private key: it must NOT be pasted into a chat. Tell them to download it from Firebase console -> Project settings -> Service accounts -> Generate new private key, and POST the file to /organizations/' +
+                "Push is not set up for this app. It needs the customer's own Firebase service account, which is a private key: it must NOT be pasted into a chat. Tell them to download it from Firebase console -> Project settings -> Service accounts -> Generate new private key, and POST the file to /organizations/" +
                 orgId +
-                '/apps/' +
+                "/apps/" +
                 appId +
                 '/push/credentials as { "serviceAccount": <the JSON> }.',
             }),
         ...(status?.configured && !status?.devices
           ? {
-              note: 'Configured, but no device has registered yet. The app must POST its FCM token to /apps/<slug>/api/devices after the user signs in.',
+              note: "Configured, but no device has registered yet. The app must POST its FCM token to /apps/<slug>/api/devices after the user signs in.",
             }
           : {}),
       });
@@ -1020,66 +1729,150 @@ export function registerTools(
   );
 
   tool(
-    'send_test_push',
-    'Send one real push notification to the given app users, to prove the chain works before an automation depends on it. Confirm with the user first: this reaches actual phones.',
+    "send_test_push",
+    "Send one real push notification to the given app users, to prove the chain works before an automation depends on it. Confirm with the user first: this reaches actual phones.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      userIds: z.array(z.string()).describe('App user ids to notify (the same ids row-level security uses)'),
-      title: z.string().optional().describe('Notification title; defaults to "TaskLite"'),
-      body: z.string().optional().describe('Notification body'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      userIds: z
+        .array(z.string())
+        .describe(
+          "App user ids to notify (the same ids row-level security uses)",
+        ),
+      title: z
+        .string()
+        .optional()
+        .describe('Notification title; defaults to "TaskLite"'),
+      body: z.string().optional().describe("Notification body"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
-    async ({ appId, userIds, title, body, organizationId }: {
-      appId: string; userIds: string[]; title?: string; body?: string; organizationId?: string;
+    async ({
+      appId,
+      userIds,
+      title,
+      body,
+      organizationId,
+    }: {
+      appId: string;
+      userIds: string[];
+      title?: string;
+      body?: string;
+      organizationId?: string;
     }) => {
       const orgId = await resolveOrg(organizationId);
-      const res = await getApi().request<any>('POST', `/organizations/${orgId}/apps/${appId}/push/test`, {
-        userIds,
-        title,
-        body,
-      });
+      const res = await getApi().request<any>(
+        "POST",
+        `/organizations/${orgId}/apps/${appId}/push/test`,
+        {
+          userIds,
+          title,
+          body,
+        },
+      );
       return ok({
         ...res,
         reading:
-          'sent = notifications handed to Google. unreachable = users with no registered device, which means the app has not sent its token yet. removedTokens = devices the service says no longer exist; those are deleted.',
+          "sent = notifications handed to Google. unreachable = users with no registered device, which means the app has not sent its token yet. removedTokens = devices the service says no longer exist; those are deleted.",
       });
     },
   );
 
   tool(
-    'publish_app',
-    'Publish an app — required before its API endpoints accept external calls.',
-    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "publish_app",
+    "Publish an app — required before its API endpoints accept external calls.",
+    {
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
-      return ok(await getApi().request('POST', `/organizations/${orgId}/apps/${appId}/publish`, {}));
+      return ok(
+        await getApi().request(
+          "POST",
+          `/organizations/${orgId}/apps/${appId}/publish`,
+          {},
+        ),
+      );
     },
   );
 
   tool(
-    'create_app_endpoint',
-    'Expose a board as a REST endpoint of an app: /apps/{appSlug}/api/{slug}. exposedColumns limits which columns are readable/writable. rowLevelSecurity.enabled makes the endpoint per-user: the developer\'s server sends `X-App-User: <their user id>` next to the API key, and the endpoint returns, updates and deletes ONLY that user\'s rows (401 without the header). Use it whenever the app has its own users.',
+    "create_app_endpoint",
+    "Expose a board as a REST endpoint of an app: /apps/{appSlug}/api/{slug}. exposedColumns limits which columns are readable/writable. rowLevelSecurity.enabled makes the endpoint per-user: the developer's server sends `X-App-User: <their user id>` next to the API key, and the endpoint returns, updates and deletes ONLY that user's rows (401 without the header). Use it whenever the app has its own users.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      slug: z.string().describe('URL slug: lowercase letters, digits and dashes'),
-      name: z.string().describe('Human-readable name'),
-      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      slug: z
+        .string()
+        .describe("URL slug: lowercase letters, digits and dashes"),
+      name: z.string().describe("Human-readable name"),
+      allowedMethods: z
+        .array(z.enum(["GET", "POST", "PATCH", "DELETE"]))
+        .optional()
+        .describe(
+          "HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE",
+        ),
       exposedColumns: z
         .array(
           z.object({
-            columnId: z.string().describe('Column id (from get_board_schema)'),
-            alias: z.string().optional().describe('JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.'),
-            readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
+            columnId: z.string().describe("Column id (from get_board_schema)"),
+            alias: z
+              .string()
+              .optional()
+              .describe(
+                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.",
+              ),
+            readOnly: z
+              .boolean()
+              .optional()
+              .describe(
+                "Expose the column for reading only; writes to it are refused with 400",
+              ),
           }),
         )
         .optional()
-        .describe('Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata'),
+        .describe(
+          "Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata",
+        ),
       rowLevelSecurity: z
-        .object({ enabled: z.boolean().describe('Scope every request to the calling app user (X-App-User header)'), filterByUserId: z.boolean().optional().describe('Also filter reads to rows the user created') })
+        .object({
+          enabled: z
+            .boolean()
+            .describe(
+              "Scope every request to the calling app user (X-App-User header)",
+            ),
+          filterByUserId: z
+            .boolean()
+            .optional()
+            .describe("Also filter reads to rows the user created"),
+        })
         .optional()
-        .describe('Row-level security: when enabled, each app user sees and edits only their own rows'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+        .describe(
+          "Row-level security: when enabled, each app user sees and edits only their own rows",
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ appId, organizationId, ...body }) => {
       // Without exposedColumns the endpoint answers reads with bare item
@@ -1088,55 +1881,99 @@ export function registerTools(
       if (!body.exposedColumns?.length) {
         return ok({
           error:
-            'exposedColumns is required in practice: an endpoint without it returns only id/title/status on GET and stores nothing on POST/PATCH. Call get_board_schema for the board and pass its column ids.',
+            "exposedColumns is required in practice: an endpoint without it returns only id/title/status on GET and stores nothing on POST/PATCH. Call get_board_schema for the board and pass its column ids.",
         });
       }
       const orgId = await resolveOrg(organizationId);
       return ok(
-        await getApi().request('POST', `/organizations/${orgId}/apps/${appId}/endpoints`, body),
+        await getApi().request(
+          "POST",
+          `/organizations/${orgId}/apps/${appId}/endpoints`,
+          body,
+        ),
       );
     },
   );
 
   tool(
-    'list_app_endpoints',
-    'List an app\'s REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.',
-    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "list_app_endpoints",
+    "List an app's REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
+    {
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
-        await getApi().request('GET', `/organizations/${orgId}/apps/${appId}/endpoints`),
+        await getApi().request(
+          "GET",
+          `/organizations/${orgId}/apps/${appId}/endpoints`,
+        ),
       );
     },
   );
 
   tool(
-    'update_app_endpoint',
-    'Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.',
+    "update_app_endpoint",
+    "Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      endpointId: z.string().describe('Endpoint id (from list_app_endpoints)'),
-      slug: z.string().optional().describe('URL slug: lowercase letters, digits and dashes'),
-      name: z.string().optional().describe('Human-readable name'),
-      allowedMethods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      endpointId: z.string().describe("Endpoint id (from list_app_endpoints)"),
+      slug: z
+        .string()
+        .optional()
+        .describe("URL slug: lowercase letters, digits and dashes"),
+      name: z.string().optional().describe("Human-readable name"),
+      allowedMethods: z
+        .array(z.enum(["GET", "POST", "PATCH", "DELETE"]))
+        .optional()
+        .describe(
+          "HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE",
+        ),
       exposedColumns: z
         .array(
           z.object({
-            columnId: z.string().describe('Column id (from get_board_schema)'),
-            alias: z.string().optional().describe('JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.'),
-            readOnly: z.boolean().optional().describe('Expose the column for reading only; writes to it are refused with 400'),
+            columnId: z.string().describe("Column id (from get_board_schema)"),
+            alias: z
+              .string()
+              .optional()
+              .describe(
+                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.",
+              ),
+            readOnly: z
+              .boolean()
+              .optional()
+              .describe(
+                "Expose the column for reading only; writes to it are refused with 400",
+              ),
           }),
         )
         .optional()
-        .describe('Replacement list of exposed columns (same shape as create_app_endpoint)'),
-      isActive: z.boolean().optional().describe('Whether it is active'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+        .describe(
+          "Replacement list of exposed columns (same shape as create_app_endpoint)",
+        ),
+      isActive: z.boolean().optional().describe("Whether it is active"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ appId, endpointId, organizationId, ...body }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
         await getApi().request(
-          'PATCH',
+          "PATCH",
           `/organizations/${orgId}/apps/${appId}/endpoints/${endpointId}`,
           body,
         ),
@@ -1145,24 +1982,37 @@ export function registerTools(
   );
 
   tool(
-    'create_app_api_key',
-    'Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.',
+    "create_app_api_key",
+    "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      name: z.string().optional().describe('Human-readable name'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      name: z.string().optional().describe("Human-readable name"),
       scopes: z
-        .array(z.enum(['read', 'write']))
+        .array(z.enum(["read", "write"]))
         .optional()
-        .describe('Permissions recorded on the key: ["read"] or ["read","write"]. Omit to match the app: write when any endpoint accepts POST, PATCH or DELETE.'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+        .describe(
+          'Permissions recorded on the key: ["read"] or ["read","write"]. Omit to match the app: write when any endpoint accepts POST, PATCH or DELETE.',
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ appId, name, scopes, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
-        await getApi().request('POST', `/organizations/${orgId}/apps/${appId}/api-keys`, {
-          name: name || 'frontend',
-          ...(scopes?.length ? { scopes } : {}),
-        }),
+        await getApi().request(
+          "POST",
+          `/organizations/${orgId}/apps/${appId}/api-keys`,
+          {
+            name: name || "frontend",
+            ...(scopes?.length ? { scopes } : {}),
+          },
+        ),
       );
     },
   );
@@ -1174,19 +2024,30 @@ export function registerTools(
   // of the ChatGPT connector scored exactly those). Deterministic — no model
   // in here, the caller already is one.
   const RESERVED_ALIASES = new Set([
-    'id', 'title', 'description', 'status', 'priority', 'duedate', 'assignedto',
-    'createdat', 'updatedat', 'order', 'appuserid',
+    "id",
+    "title",
+    "description",
+    "status",
+    "priority",
+    "duedate",
+    "assignedto",
+    "createdat",
+    "updatedat",
+    "order",
+    "appuserid",
   ]);
   const toAlias = (name: string, index: number, used: Set<string>): string => {
     let base = name
-      .replace(/[^A-Za-z0-9]+/g, ' ')
+      .replace(/[^A-Za-z0-9]+/g, " ")
       .trim()
-      .split(' ')
+      .split(" ")
       .filter(Boolean)
       .map((w, i) =>
-        i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1),
+        i === 0
+          ? w.charAt(0).toLowerCase() + w.slice(1)
+          : w.charAt(0).toUpperCase() + w.slice(1),
       )
-      .join('');
+      .join("");
     if (!base || /^\d/.test(base)) base = `field${index + 1}`;
     if (RESERVED_ALIASES.has(base.toLowerCase())) base = `${base}Value`;
     let alias = base;
@@ -1196,7 +2057,10 @@ export function registerTools(
     return alias;
   };
   const toSlug = (name: string, index: number, used: Set<string>): string => {
-    let base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    let base = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
     if (!base) base = `board-${index + 1}`;
     let slug = base;
     let n = 2;
@@ -1206,78 +2070,172 @@ export function registerTools(
   };
 
   tool(
-    'build_backend',
+    "build_backend",
     'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind "data": only the columns you define, no task fields); set kind "tasks" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.',
     {
       project: z
         .object({
           name: z.string().describe('Project name, e.g. "Bike Repair Shop"'),
-          description: z.string().optional().describe('One line on what the system is for'),
+          description: z
+            .string()
+            .optional()
+            .describe("One line on what the system is for"),
         })
-        .describe('The project that holds the boards'),
+        .describe("The project that holds the boards"),
       boards: z
         .array(
           z.object({
-            name: z.string().describe('Board (table) name, e.g. "Repair Orders"'),
-            description: z.string().optional().describe('One line on what a row is'),
-            kind: z.enum(['tasks', 'data']).optional().describe('"data" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. "tasks": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do.'),
+            name: z
+              .string()
+              .describe('Board (table) name, e.g. "Repair Orders"'),
+            description: z
+              .string()
+              .optional()
+              .describe("One line on what a row is"),
+            kind: z
+              .enum(["tasks", "data"])
+              .optional()
+              .describe(
+                '"data" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. "tasks": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do.',
+              ),
             columns: z
               .array(
                 z.object({
-                  name: z.string().describe('Column name as the user would say it, e.g. "Customer", "Phone", "Repair Status"'),
-                  type: z.string().describe('text, rich_text, number, currency, date, datetime, phone, email, link, checkbox, dropdown, status, priority, rating, file, people, relation, label, duration'),
-                  options: z.array(z.string()).optional().describe('The closed choices for dropdown/status/priority, e.g. ["Received","In Repair","Ready","Completed"]'),
-                  required: z.boolean().optional().describe('Reject API creates that leave it blank'),
-                  validation: z.record(z.any()).optional().describe('{ unique, min, max, minLength, maxLength, pattern, patternMessage }'),
-                  relatedBoard: z.string().optional().describe('relation columns only: the name of another board in this spec that this column links to, e.g. "Customers"'),
-                  relationType: z
-                    .enum(['many_to_one', 'one_to_many', 'many_to_many', 'one_to_one'])
+                  name: z
+                    .string()
+                    .describe(
+                      'Column name as the user would say it, e.g. "Customer", "Phone", "Repair Status"',
+                    ),
+                  type: z
+                    .string()
+                    .describe(
+                      "text, rich_text, number, currency, date, datetime, phone, email, link, checkbox, dropdown, status, priority, rating, file, people, relation, label, duration",
+                    ),
+                  options: z
+                    .array(z.string())
                     .optional()
-                    .describe('relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it.'),
-                  settings: z.record(z.any()).optional().describe('Other type settings, e.g. { currency: "ILS" }. (relatedBoardName / relationType are also accepted here for compatibility.)'),
-                  alias: z.string().optional().describe('API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)'),
+                    .describe(
+                      'The closed choices for dropdown/status/priority, e.g. ["Received","In Repair","Ready","Completed"]',
+                    ),
+                  required: z
+                    .boolean()
+                    .optional()
+                    .describe("Reject API creates that leave it blank"),
+                  validation: z
+                    .record(z.any())
+                    .optional()
+                    .describe(
+                      "{ unique, min, max, minLength, maxLength, pattern, patternMessage }",
+                    ),
+                  relatedBoard: z
+                    .string()
+                    .optional()
+                    .describe(
+                      'relation columns only: the name of another board in this spec that this column links to, e.g. "Customers"',
+                    ),
+                  relationType: z
+                    .enum([
+                      "many_to_one",
+                      "one_to_many",
+                      "many_to_many",
+                      "one_to_one",
+                    ])
+                    .optional()
+                    .describe(
+                      "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it.",
+                    ),
+                  settings: z
+                    .record(z.any())
+                    .optional()
+                    .describe(
+                      'Other type settings, e.g. { currency: "ILS" }. (relatedBoardName / relationType are also accepted here for compatibility.)',
+                    ),
+                  alias: z
+                    .string()
+                    .optional()
+                    .describe(
+                      "API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)",
+                    ),
                 }),
               )
               .min(1)
-              .describe('Typed columns of the board'),
+              .describe("Typed columns of the board"),
             rows: z
               .array(z.record(z.any()))
               .optional()
-              .describe('Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title; without it the first plain text value is used, and failing that the row is named after its board and position. A row that other boards reference must carry a title (or a text value) so the reference can be resolved. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order).'),
+              .describe(
+                'Optional sample rows keyed by column name, e.g. [{ "Customer": "Sam Miller", "Phone": "052-555-0142", "Price": 80 }]. "title" sets the row title; without it the first plain text value is used, and failing that the row is named after its board and position. A row that other boards reference must carry a title (or a text value) so the reference can be resolved. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order).',
+              ),
           }),
         )
         .min(1)
-        .describe('The boards (tables) of the backend, in any order'),
+        .describe("The boards (tables) of the backend, in any order"),
       api: z
         .object({
-          name: z.string().optional().describe('App name; defaults to "<project> API"'),
-          methods: z.array(z.enum(['GET', 'POST', 'PATCH', 'DELETE'])).optional().describe('HTTP methods every endpoint accepts; defaults to all four'),
-          rowLevelSecurity: z.boolean().optional().describe('true when the app has its own users and each may see only their rows (the caller then sends X-App-User)'),
+          name: z
+            .string()
+            .optional()
+            .describe('App name; defaults to "<project> API"'),
+          methods: z
+            .array(z.enum(["GET", "POST", "PATCH", "DELETE"]))
+            .optional()
+            .describe(
+              "HTTP methods every endpoint accepts; defaults to all four",
+            ),
+          rowLevelSecurity: z
+            .boolean()
+            .optional()
+            .describe(
+              "true when the app has its own users and each may see only their rows (the caller then sends X-App-User)",
+            ),
         })
         .optional()
-        .describe('Include to publish a REST API over every board and mint a key; omit for a boards-only build'),
-      organizationId: z.string().optional().describe('Organization id; needed only when the account belongs to several (the error then lists them)'),
+        .describe(
+          "Include to publish a REST API over every board and mint a key; omit for a boards-only build",
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; needed only when the account belongs to several (the error then lists them)",
+        ),
     },
     async ({ project, boards, api, organizationId }) => {
       // Validate the whole spec before creating anything: a half-built project
       // after a spec error is worse than a clear refusal.
       const problems: string[] = [];
-      const boardNames = new Set(boards.map((b: { name: string }) => b.name.toLowerCase()));
+      const boardNames = new Set(
+        boards.map((b: { name: string }) => b.name.toLowerCase()),
+      );
       for (const b of boards) {
         for (const c of b.columns) {
-          if ((c.type === 'dropdown' || c.type === 'status' || c.type === 'priority') && !c.options?.length && !(c.settings as any)?.options) {
+          if (
+            (c.type === "dropdown" ||
+              c.type === "status" ||
+              c.type === "priority") &&
+            !c.options?.length &&
+            !(c.settings as any)?.options
+          ) {
             problems.push(`${b.name}.${c.name}: ${c.type} needs options`);
           }
           if (c.alias && RESERVED_ALIASES.has(c.alias.toLowerCase())) {
-            problems.push(`${b.name}.${c.name}: alias "${c.alias}" is a reserved item field`);
+            problems.push(
+              `${b.name}.${c.name}: alias "${c.alias}" is a reserved item field`,
+            );
           }
-          if (c.type === 'relation') {
-            const target = String(c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? '').toLowerCase();
+          if (c.type === "relation") {
+            const target = String(
+              c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? "",
+            ).toLowerCase();
             if (!target || !boardNames.has(target)) {
-              problems.push(`${b.name}.${c.name}: relation needs relatedBoard naming a board in this spec (have: ${boards.map((x: { name: string }) => x.name).join(', ')})`);
+              problems.push(
+                `${b.name}.${c.name}: relation needs relatedBoard naming a board in this spec (have: ${boards.map((x: { name: string }) => x.name).join(", ")})`,
+              );
             }
           } else if (c.relatedBoard || c.relationType) {
-            problems.push(`${b.name}.${c.name}: relatedBoard/relationType only apply to type "relation" (got ${c.type})`);
+            problems.push(
+              `${b.name}.${c.name}: relatedBoard/relationType only apply to type "relation" (got ${c.type})`,
+            );
           }
         }
       }
@@ -1293,44 +2251,77 @@ export function registerTools(
         const titles = new Set<string>();
         for (const row of b.rows || []) {
           const cols = b.columns;
-          let title = typeof row.title === 'string' ? row.title : '';
+          let title = typeof row.title === "string" ? row.title : "";
           if (!title) {
             for (const [k, v] of Object.entries(row)) {
-              const col = cols.find((c: { name: string }) => c.name.toLowerCase() === k.toLowerCase());
-              if (col && col.type !== 'relation' && typeof v === 'string') { title = v; break; }
+              const col = cols.find(
+                (c: { name: string }) =>
+                  c.name.toLowerCase() === k.toLowerCase(),
+              );
+              if (col && col.type !== "relation" && typeof v === "string") {
+                title = v;
+                break;
+              }
             }
           }
           if (title) titles.add(title.toLowerCase());
-          else untitled.set(b.name.toLowerCase(), (untitled.get(b.name.toLowerCase()) ?? 0) + 1);
+          else
+            untitled.set(
+              b.name.toLowerCase(),
+              (untitled.get(b.name.toLowerCase()) ?? 0) + 1,
+            );
         }
         specTitles.set(b.name.toLowerCase(), titles);
       }
       for (const b of boards) {
         for (const row of b.rows || []) {
           for (const [k, v] of Object.entries(row)) {
-            const col = b.columns.find((c: { name: string }) => c.name.toLowerCase() === k.toLowerCase());
+            const col = b.columns.find(
+              (c: { name: string }) => c.name.toLowerCase() === k.toLowerCase(),
+            );
             if (!col) continue;
-            if ((col.type === 'dropdown' || col.type === 'status' || col.type === 'priority') && col.options?.length && typeof v === 'string' && !col.options.includes(v)) {
-              problems.push(`${b.name} row "${String(row.title ?? '')}": "${col.name}" = "${v}" is not one of its options (${col.options.join(', ')})`);
+            if (
+              (col.type === "dropdown" ||
+                col.type === "status" ||
+                col.type === "priority") &&
+              col.options?.length &&
+              typeof v === "string" &&
+              !col.options.includes(v)
+            ) {
+              problems.push(
+                `${b.name} row "${String(row.title ?? "")}": "${col.name}" = "${v}" is not one of its options (${col.options.join(", ")})`,
+              );
               continue;
             }
-            if (col.type !== 'relation') continue;
+            if (col.type !== "relation") continue;
             const rt = col.relationType ?? (col.settings as any)?.relationType;
-            if ((rt === 'many_to_one' || rt === 'one_to_one') && Array.isArray(v) && v.length > 1) {
-              problems.push(`${b.name} row "${String(row.title ?? '')}": relation "${col.name}" is ${rt}, so it takes one title, not ${v.length}`);
+            if (
+              (rt === "many_to_one" || rt === "one_to_one") &&
+              Array.isArray(v) &&
+              v.length > 1
+            ) {
+              problems.push(
+                `${b.name} row "${String(row.title ?? "")}": relation "${col.name}" is ${rt}, so it takes one title, not ${v.length}`,
+              );
               continue;
             }
-            const target = String(col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? '').toLowerCase();
+            const target = String(
+              col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? "",
+            ).toLowerCase();
             const have = specTitles.get(target) || new Set<string>();
             for (const want of (Array.isArray(v) ? v : [v]).map(String)) {
               if (!have.has(want.toLowerCase())) {
-                const targetName = String(col.relatedBoard ?? (col.settings as any)?.relatedBoardName ?? '');
+                const targetName = String(
+                  col.relatedBoard ??
+                    (col.settings as any)?.relatedBoardName ??
+                    "",
+                );
                 const blank = untitled.get(target) ?? 0;
                 problems.push(
-                  `${b.name} row "${String(row.title ?? '')}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${targetName}` +
+                  `${b.name} row "${String(row.title ?? "")}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${targetName}` +
                     (blank
                       ? `. ${blank} row(s) of ${targetName} have no title and no text value, so nothing can reference them — give each row a title.`
-                      : ''),
+                      : ""),
                 );
               }
             }
@@ -1348,17 +2339,27 @@ export function registerTools(
       // backend behind, which is worse than never starting.
       if (api) {
         try {
-          const sub = await client.request<any>('GET', `/organizations/${orgId}/subscription`);
+          const sub = await client.request<any>(
+            "GET",
+            `/organizations/${orgId}/subscription`,
+          );
           const allowed = sub?.plan?.features?.limits?.publishedApps;
-          if (typeof allowed === 'number') {
-            const apps = await client.request<any>('GET', `/organizations/${orgId}/apps`);
-            const list: any[] = Array.isArray(apps) ? apps : (apps?.items ?? apps?.data ?? []);
-            const published = list.filter((a) => a?.status === 'published' && !a?.deletedAt).length;
+          if (typeof allowed === "number") {
+            const apps = await client.request<any>(
+              "GET",
+              `/organizations/${orgId}/apps`,
+            );
+            const list: any[] = Array.isArray(apps)
+              ? apps
+              : (apps?.items ?? apps?.data ?? []);
+            const published = list.filter(
+              (a) => a?.status === "published" && !a?.deletedAt,
+            ).length;
             if (published >= allowed) {
               return ok({
                 built: false,
                 problems: [
-                  `The ${sub?.plan?.name ?? 'current'} plan allows ${allowed} published app${allowed === 1 ? '' : 's'} and this organization already has ${published}. Nothing was created. Archive an app, upgrade the plan, or call build_backend again without "api" to build the project and publish later.`,
+                  `The ${sub?.plan?.name ?? "current"} plan allows ${allowed} published app${allowed === 1 ? "" : "s"} and this organization already has ${published}. Nothing was created. Archive an app, upgrade the plan, or call build_backend again without "api" to build the project and publish later.`,
                 ],
               });
             }
@@ -1370,27 +2371,50 @@ export function registerTools(
       }
 
       let createdAppId: string | undefined;
-      const created = await client.request<any>('POST', `/organizations/${orgId}/projects`, {
-        name: project.name,
-        organizationId: orgId,
-        ...(project.description ? { description: project.description } : {}),
-      });
+      const created = await client.request<any>(
+        "POST",
+        `/organizations/${orgId}/projects`,
+        {
+          name: project.name,
+          organizationId: orgId,
+          ...(project.description ? { description: project.description } : {}),
+        },
+      );
       try {
-        type Col = { id: string; name: string; type: string; alias: string; relatedBoardId?: string; relationType?: string };
-        type Built = { id: string; name: string; kind: string; slug: string; columns: Col[]; rows: number; adminUrl: string };
+        type Col = {
+          id: string;
+          name: string;
+          type: string;
+          alias: string;
+          relatedBoardId?: string;
+          relationType?: string;
+        };
+        type Built = {
+          id: string;
+          name: string;
+          kind: string;
+          slug: string;
+          columns: Col[];
+          rows: number;
+          adminUrl: string;
+        };
         const outBoards: Built[] = [];
         const boardIdByName = new Map<string, string>();
         const usedSlugs = new Set<string>();
 
         // 1. boards first, so relation columns can point at any of them
         for (const [bi, b] of boards.entries()) {
-          const kind = b.kind || 'data';
-          const board = await client.request<any>('POST', `/projects/${created.id}/boards`, {
-            name: b.name,
-            projectId: created.id,
-            kind,
-            ...(b.description ? { description: b.description } : {}),
-          });
+          const kind = b.kind || "data";
+          const board = await client.request<any>(
+            "POST",
+            `/projects/${created.id}/boards`,
+            {
+              name: b.name,
+              projectId: created.id,
+              kind,
+              ...(b.description ? { description: b.description } : {}),
+            },
+          );
           boardIdByName.set(b.name.toLowerCase(), board.id);
           outBoards.push({
             id: board.id,
@@ -1399,7 +2423,9 @@ export function registerTools(
             slug: toSlug(b.name, bi, usedSlugs),
             columns: [],
             rows: 0,
-            adminUrl: client.appUrl(`/projects/${created.id}/boards/${board.id}`),
+            adminUrl: client.appUrl(
+              `/projects/${created.id}/boards/${board.id}`,
+            ),
           });
         }
 
@@ -1413,20 +2439,27 @@ export function registerTools(
             if (c.options?.length) settings.options = c.options;
             if (c.validation) settings.validation = c.validation;
             let relatedBoardId: string | undefined;
-            if (type === 'relation') {
-              relatedBoardId = boardIdByName.get(String(c.relatedBoard ?? settings.relatedBoardName).toLowerCase());
+            if (type === "relation") {
+              relatedBoardId = boardIdByName.get(
+                String(
+                  c.relatedBoard ?? settings.relatedBoardName,
+                ).toLowerCase(),
+              );
               delete settings.relatedBoardName;
               settings.relatedBoardId = relatedBoardId;
               settings.projectId = created.id;
-              settings.relationType = c.relationType || settings.relationType || 'many_to_many';
+              settings.relationType =
+                c.relationType || settings.relationType || "many_to_many";
             }
             const objection = columnTypeObjection(c.name, type, settings);
             if (objection && objection.suggestedType !== type) {
-              notes.push(`${b.name}.${c.name}: created as ${objection.suggestedType} rather than ${type}, because the name says so`);
+              notes.push(
+                `${b.name}.${c.name}: created as ${objection.suggestedType} rather than ${type}, because the name says so`,
+              );
               type = objection.suggestedType;
             }
             const column = await client.request<any>(
-              'POST',
+              "POST",
               `/projects/${created.id}/boards/${built.id}/columns`,
               {
                 name: c.name,
@@ -1437,7 +2470,18 @@ export function registerTools(
             );
             const alias = c.alias || toAlias(c.name, ci, usedAliases);
             if (c.alias) usedAliases.add(c.alias.toLowerCase());
-            built.columns.push({ id: column.id, name: c.name, type, alias, ...(relatedBoardId ? { relatedBoardId, relationType: String(settings.relationType) } : {}) });
+            built.columns.push({
+              id: column.id,
+              name: c.name,
+              type,
+              alias,
+              ...(relatedBoardId
+                ? {
+                    relatedBoardId,
+                    relationType: String(settings.relationType),
+                  }
+                : {}),
+            });
           }
         }
 
@@ -1446,16 +2490,29 @@ export function registerTools(
         // (A links B, B links A) falls back to spec order for what remains.
         const depsOf = (b: (typeof boards)[number]): string[] =>
           b.columns
-            .filter((c: { type: string }) => c.type === 'relation')
-            .map((c: { relatedBoard?: string; settings?: Record<string, unknown> }) => String(c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? '').toLowerCase())
+            .filter((c: { type: string }) => c.type === "relation")
+            .map(
+              (c: {
+                relatedBoard?: string;
+                settings?: Record<string, unknown>;
+              }) =>
+                String(
+                  c.relatedBoard ?? (c.settings as any)?.relatedBoardName ?? "",
+                ).toLowerCase(),
+            )
             .filter((n: string) => n && n !== b.name.toLowerCase());
         const rowOrder: number[] = [];
         const done = new Set<string>();
         let remaining = boards.map((_: unknown, i: number) => i);
         while (remaining.length) {
-          const ready = remaining.filter((i: number) => depsOf(boards[i]).every((d: string) => done.has(d)));
+          const ready = remaining.filter((i: number) =>
+            depsOf(boards[i]).every((d: string) => done.has(d)),
+          );
           const next = ready.length ? ready : [remaining[0]];
-          for (const i of next) { rowOrder.push(i); done.add(boards[i].name.toLowerCase()); }
+          for (const i of next) {
+            rowOrder.push(i);
+            done.add(boards[i].name.toLowerCase());
+          }
           remaining = remaining.filter((i: number) => !next.includes(i));
         }
         const itemIdByBoardTitle = new Map<string, Map<string, string>>();
@@ -1463,60 +2520,98 @@ export function registerTools(
           const b = boards[bi];
           if (!b.rows?.length) continue;
           const built = outBoards[bi];
-          const byName = new Map(built.columns.map((c) => [c.name.toLowerCase(), c]));
+          const byName = new Map(
+            built.columns.map((c) => [c.name.toLowerCase(), c]),
+          );
           const titles = new Map<string, string>();
           itemIdByBoardTitle.set(built.id, titles);
           for (const row of b.rows) {
             const cells: Record<string, unknown> = {};
-            let title = typeof row.title === 'string' ? row.title : '';
+            let title = typeof row.title === "string" ? row.title : "";
             for (const [k, v] of Object.entries(row)) {
-              if (k === 'title') continue;
+              if (k === "title") continue;
               const col = byName.get(k.toLowerCase());
               if (!col) {
-                notes.push(`${b.name}: row field "${k}" matches no column and was skipped`);
+                notes.push(
+                  `${b.name}: row field "${k}" matches no column and was skipped`,
+                );
                 continue;
               }
-              if (col.type === 'relation' && col.relatedBoardId && (typeof v === 'string' || Array.isArray(v))) {
+              if (
+                col.type === "relation" &&
+                col.relatedBoardId &&
+                (typeof v === "string" || Array.isArray(v))
+              ) {
                 const wanted = (Array.isArray(v) ? v : [v]).map(String);
-                const lookup = itemIdByBoardTitle.get(col.relatedBoardId) || new Map<string, string>();
-                const ids = wanted.map((t) => lookup.get(t.toLowerCase())).filter((x): x is string => Boolean(x));
+                const lookup =
+                  itemIdByBoardTitle.get(col.relatedBoardId) ||
+                  new Map<string, string>();
+                const ids = wanted
+                  .map((t) => lookup.get(t.toLowerCase()))
+                  .filter((x): x is string => Boolean(x));
                 if (ids.length < wanted.length) {
-                  notes.push(`${b.name}: relation "${col.name}" could not find ${wanted.length - ids.length} of ${wanted.length} referenced rows by title`);
+                  notes.push(
+                    `${b.name}: relation "${col.name}" could not find ${wanted.length - ids.length} of ${wanted.length} referenced rows by title`,
+                  );
                 }
                 if (ids.length) cells[col.id] = { relatedItemIds: ids };
                 continue;
               }
               cells[col.id] = v;
-              if (!title && typeof v === 'string') title = v;
+              if (!title && typeof v === "string") title = v;
             }
-            const item = await client.request<any>('POST', `/projects/${created.id}/boards/${built.id}/items`, {
-              title: title || `${b.name} ${built.rows + 1}`,
-              cells,
-            });
-            if (item?.id) titles.set(String(item.title ?? title).toLowerCase(), item.id);
+            const item = await client.request<any>(
+              "POST",
+              `/projects/${created.id}/boards/${built.id}/items`,
+              {
+                title: title || `${b.name} ${built.rows + 1}`,
+                cells,
+              },
+            );
+            if (item?.id)
+              titles.set(String(item.title ?? title).toLowerCase(), item.id);
             built.rows++;
           }
         }
 
         let apiOut: Record<string, unknown> | undefined;
         if (api) {
-          const app = await client.request<any>('POST', `/organizations/${orgId}/apps`, {
-            name: api.name || `${project.name} API`,
-            projectId: created.id,
-          });
+          const app = await client.request<any>(
+            "POST",
+            `/organizations/${orgId}/apps`,
+            {
+              name: api.name || `${project.name} API`,
+              projectId: created.id,
+            },
+          );
           createdAppId = app.id;
-          await client.request('POST', `/organizations/${orgId}/apps/${app.id}/publish`, {});
-          const methods = api.methods?.length ? api.methods : ['GET', 'POST', 'PATCH', 'DELETE'];
+          await client.request(
+            "POST",
+            `/organizations/${orgId}/apps/${app.id}/publish`,
+            {},
+          );
+          const methods = api.methods?.length
+            ? api.methods
+            : ["GET", "POST", "PATCH", "DELETE"];
           const endpoints: Array<Record<string, unknown>> = [];
           for (const b of outBoards) {
-            await client.request('POST', `/organizations/${orgId}/apps/${app.id}/endpoints`, {
-              boardId: b.id,
-              slug: b.slug,
-              name: b.name,
-              allowedMethods: methods,
-              exposedColumns: b.columns.map((c) => ({ columnId: c.id, alias: c.alias })),
-              ...(api.rowLevelSecurity ? { rowLevelSecurity: { enabled: true } } : {}),
-            });
+            await client.request(
+              "POST",
+              `/organizations/${orgId}/apps/${app.id}/endpoints`,
+              {
+                boardId: b.id,
+                slug: b.slug,
+                name: b.name,
+                allowedMethods: methods,
+                exposedColumns: b.columns.map((c) => ({
+                  columnId: c.id,
+                  alias: c.alias,
+                })),
+                ...(api.rowLevelSecurity
+                  ? { rowLevelSecurity: { enabled: true } }
+                  : {}),
+              },
+            );
             endpoints.push({
               board: b.name,
               url: `${client.apiUrl}/apps/${app.slug}/api/${b.slug}`,
@@ -1524,12 +2619,16 @@ export function registerTools(
               fields: b.columns.map((c) => c.alias),
             });
           }
-          const writes = methods.some((m: string) => m !== 'GET');
-          const scopes = writes ? ['read', 'write'] : ['read'];
-          const key = await client.request<any>('POST', `/organizations/${orgId}/apps/${app.id}/api-keys`, {
-            name: 'frontend',
-            scopes,
-          });
+          const writes = methods.some((m: string) => m !== "GET");
+          const scopes = writes ? ["read", "write"] : ["read"];
+          const key = await client.request<any>(
+            "POST",
+            `/organizations/${orgId}/apps/${app.id}/api-keys`,
+            {
+              name: "frontend",
+              scopes,
+            },
+          );
           apiOut = {
             appId: app.id,
             appSlug: app.slug,
@@ -1539,20 +2638,33 @@ export function registerTools(
             apiKey: key.rawKey,
             scopes,
             keyRule:
-              'This is the only time the key is shown. Keep it server-side (env var, API route); send it as Authorization: Bearer <key>.' +
-              (api.rowLevelSecurity ? ' Row-level security is on: also send X-App-User: <your user id> on every call.' : ''),
+              "This is the only time the key is shown. Keep it server-side (env var, API route); send it as Authorization: Bearer <key>." +
+              (api.rowLevelSecurity
+                ? " Row-level security is on: also send X-App-User: <your user id> on every call."
+                : ""),
             adminUrl: client.appUrl(`/apps/${app.id}`),
           };
         }
 
         return ok({
           built: true,
-          project: { id: created.id, name: project.name, adminUrl: client.appUrl(`/projects/${created.id}`) },
+          project: {
+            id: created.id,
+            name: project.name,
+            adminUrl: client.appUrl(`/projects/${created.id}`),
+          },
           boards: outBoards.map(({ slug, columns, ...b }) => ({
             ...b,
             ...(api ? { endpoint: slug } : {}),
             columns: columns.map(({ relatedBoardId, relationType, ...c }) =>
-              relatedBoardId ? { ...c, relatedBoard: outBoards.find((x) => x.id === relatedBoardId)?.name, relationType } : c,
+              relatedBoardId
+                ? {
+                    ...c,
+                    relatedBoard: outBoards.find((x) => x.id === relatedBoardId)
+                      ?.name,
+                    relationType,
+                  }
+                : c,
             ),
           })),
           ...(apiOut ? { api: apiOut } : {}),
@@ -1566,125 +2678,207 @@ export function registerTools(
         const undone: string[] = [];
         try {
           if (createdAppId) {
-            await client.request('DELETE', `/organizations/${orgId}/apps/${createdAppId}`);
-            undone.push('app');
+            await client.request(
+              "DELETE",
+              `/organizations/${orgId}/apps/${createdAppId}`,
+            );
+            undone.push("app");
           }
-          await client.request('DELETE', `/organizations/${orgId}/projects/${created.id}`);
-          undone.push('project');
+          await client.request(
+            "DELETE",
+            `/organizations/${orgId}/projects/${created.id}`,
+          );
+          undone.push("project");
         } catch {
           // Cleanup itself failed: say so rather than pretend.
         }
-        const tail =
-          undone.includes('project')
-            ? ' Nothing was left behind — the project and everything in it were removed.'
-            : ` The project "${project.name}" (${created.id}) could not be removed automatically; delete it at ${client.appUrl(`/projects/${created.id}`)}.`;
-        throw new Error(`build_backend stopped: ${message}.${tail} Fix the spec and call again.`);
+        const tail = undone.includes("project")
+          ? " Nothing was left behind — the project and everything in it were removed."
+          : ` The project "${project.name}" (${created.id}) could not be removed automatically; delete it at ${client.appUrl(`/projects/${created.id}`)}.`;
+        throw new Error(
+          `build_backend stopped: ${message}.${tail} Fix the spec and call again.`,
+        );
       }
     },
   );
 
   tool(
-    'create_automation',
+    "create_automation",
     'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
     {
-      projectId: z.string().describe('Project id (from list_projects / create_project)'),
-      boardId: z.string().describe('Board id (from list_boards / create_board)'),
-      name: z.string().describe('Human-readable name'),
-      trigger: z.enum([
-        'item_created',
-        'status_changed',
-        'column_value_changed',
-        'date_approaching',
-        'scheduled',
-      ]).describe('Event that starts the automation: item_created, status_changed, column_value_changed, date_approaching, or scheduled (cron)'),
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+      name: z.string().describe("Human-readable name"),
+      trigger: z
+        .enum([
+          "item_created",
+          "status_changed",
+          "column_value_changed",
+          "date_approaching",
+          "scheduled",
+        ])
+        .describe(
+          "Event that starts the automation: item_created, status_changed, column_value_changed, date_approaching, or scheduled (cron)",
+        ),
       triggerConfig: z
         .record(z.any())
         .optional()
-        .describe('e.g. { cron: "0 8 * * *" } for scheduled, { columnName } for column_value_changed'),
+        .describe(
+          'e.g. { cron: "0 8 * * *" } for scheduled, { columnName } for column_value_changed',
+        ),
       actions: z
         .array(
           z.object({
-            type: z.string().describe('Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file'),
-            config: z.record(z.any()).describe('Action-specific config, e.g. { url, method, headers, responseMapping } for http_request'),
+            type: z
+              .string()
+              .describe(
+                "Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file",
+              ),
+            config: z
+              .record(z.any())
+              .describe(
+                "Action-specific config, e.g. { url, method, headers, responseMapping } for http_request",
+              ),
           }),
         )
         .describe(
           'e.g. [{ type: "http_request", config: { url: "https://api.frankfurter.app/latest?from=USD&to=ILS", method: "GET", responseMapping: [{ path: "rates.ILS", columnId: "<column id from get_board_schema>" }] } }]',
         ),
-      isActive: z.boolean().optional().describe('Whether it is active'),
+      isActive: z.boolean().optional().describe("Whether it is active"),
     },
-    async ({ projectId, boardId, name, trigger, triggerConfig, actions, isActive }) => {
+    async ({
+      projectId,
+      boardId,
+      name,
+      trigger,
+      triggerConfig,
+      actions,
+      isActive,
+    }) => {
       // http_request maps response paths onto real column ids. A model that
       // guessed a name instead would create an automation that runs, succeeds,
       // and writes nothing — so say it plainly rather than let it fail quietly.
       for (const action of actions) {
-        if (action.type !== 'http_request') continue;
-        const mapping = (action.config as { responseMapping?: unknown })?.responseMapping;
+        if (action.type !== "http_request") continue;
+        const mapping = (action.config as { responseMapping?: unknown })
+          ?.responseMapping;
         if (!Array.isArray(mapping) || !mapping.length) {
           return ok({
             error:
-              'http_request needs responseMapping: [{ path, columnId }]. Without it the call runs and stores nothing. Get the column ids from get_board_schema.',
+              "http_request needs responseMapping: [{ path, columnId }]. Without it the call runs and stores nothing. Get the column ids from get_board_schema.",
           });
         }
-        const missing = mapping.filter((m: { columnId?: string }) => !m?.columnId);
+        const missing = mapping.filter(
+          (m: { columnId?: string }) => !m?.columnId,
+        );
         if (missing.length) {
           return ok({
             error:
-              'Every responseMapping entry needs a columnId (not a column name). Call get_board_schema for the real ids.',
+              "Every responseMapping entry needs a columnId (not a column name). Call get_board_schema for the real ids.",
           });
         }
       }
 
       const automation = await getApi().request<any>(
-        'POST',
+        "POST",
         `/projects/${projectId}/boards/${boardId}/automations`,
         { name, trigger, triggerConfig, actions, isActive: isActive ?? true },
       );
-      return ok({ automation, adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${boardId}`) });
+      return ok({
+        automation,
+        adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${boardId}`),
+      });
     },
   );
 
   tool(
-    'list_automations',
-    'List the automations on a board, so you can see what already runs before adding another.',
-    { projectId: z.string().describe('Project id (from list_projects / create_project)'), boardId: z.string().describe('Board id (from list_boards / create_board)') },
+    "list_automations",
+    "List the automations on a board, so you can see what already runs before adding another.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z
+        .string()
+        .describe("Board id (from list_boards / create_board)"),
+    },
     async ({ projectId, boardId }) =>
-      ok(await getApi().request('GET', `/projects/${projectId}/boards/${boardId}/automations`)),
+      ok(
+        await getApi().request(
+          "GET",
+          `/projects/${projectId}/boards/${boardId}/automations`,
+        ),
+      ),
   );
 
   tool(
-    'list_apps',
-    'List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.',
-    { organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "list_apps",
+    "List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
+    {
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ organizationId }) => {
       const orgId = await resolveOrg(organizationId);
-      return ok(await getApi().request('GET', `/organizations/${orgId}/apps`));
+      return ok(await getApi().request("GET", `/organizations/${orgId}/apps`));
     },
   );
 
   tool(
-    'get_app_spec',
-    'Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.',
-    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "get_app_spec",
+    "Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.",
+    {
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
-      return ok(await getApi().request('GET', `/organizations/${orgId}/apps/${appId}/spec/json`));
+      return ok(
+        await getApi().request(
+          "GET",
+          `/organizations/${orgId}/apps/${appId}/spec/json`,
+        ),
+      );
     },
   );
 
   tool(
-    'get_frontend_prompt',
-    'Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.',
+    "get_frontend_prompt",
+    "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      tool: z.enum(['v0', 'bolt', 'lovable', 'cursor', 'claude-code']).describe('Target tool the prompt is written for'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      tool: z
+        .enum(["v0", "bolt", "lovable", "cursor", "claude-code"])
+        .describe("Target tool the prompt is written for"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ appId, tool, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
         await getApi().request(
-          'GET',
+          "GET",
           `/organizations/${orgId}/apps/${appId}/spec/prompt/${tool}`,
         ),
       );
@@ -1703,56 +2897,75 @@ export function registerTools(
     metadata?: Record<string, unknown>;
   };
   type DocRef =
-    | { kind: 'project'; projectId: string }
-    | { kind: 'board'; projectId: string; boardId: string }
-    | { kind: 'item'; projectId: string; boardId: string; itemId: string };
+    | { kind: "project"; projectId: string }
+    | { kind: "board"; projectId: string; boardId: string }
+    | { kind: "item"; projectId: string; boardId: string; itemId: string };
 
   const parseDocId = (id: string): DocRef => {
     let m =
       id.match(/^item:([^:]+):([^:]+):([^:]+)$/) ||
       id.match(/\/projects\/([^/]+)\/boards\/([^/]+)\/items\/([^/?#]+)/);
-    if (m) return { kind: 'item', projectId: m[1], boardId: m[2], itemId: m[3] };
-    m = id.match(/^board:([^:]+):([^:]+)$/) || id.match(/\/projects\/([^/]+)\/boards\/([^/?#]+)/);
-    if (m) return { kind: 'board', projectId: m[1], boardId: m[2] };
+    if (m)
+      return { kind: "item", projectId: m[1], boardId: m[2], itemId: m[3] };
+    m =
+      id.match(/^board:([^:]+):([^:]+)$/) ||
+      id.match(/\/projects\/([^/]+)\/boards\/([^/?#]+)/);
+    if (m) return { kind: "board", projectId: m[1], boardId: m[2] };
     m = id.match(/^project:([^:]+)$/) || id.match(/\/projects\/([^/?#]+)/);
-    if (m) return { kind: 'project', projectId: m[1] };
+    if (m) return { kind: "project", projectId: m[1] };
     throw new Error(
       `Unrecognized document id "${id}". Use an id returned by search (project:…, board:…:…, item:…:…:…) or an app URL path.`,
     );
   };
   const docId = (d: DocRef): string =>
-    d.kind === 'item'
+    d.kind === "item"
       ? `item:${d.projectId}:${d.boardId}:${d.itemId}`
-      : d.kind === 'board'
+      : d.kind === "board"
         ? `board:${d.projectId}:${d.boardId}`
         : `project:${d.projectId}`;
   const docPath = (d: DocRef): string =>
-    d.kind === 'item'
+    d.kind === "item"
       ? `/projects/${d.projectId}/boards/${d.boardId}/items/${d.itemId}`
-      : d.kind === 'board'
+      : d.kind === "board"
         ? `/projects/${d.projectId}/boards/${d.boardId}`
         : `/projects/${d.projectId}`;
   // ChatGPT contract: the object as structuredContent AND JSON-encoded in content.
   const structured = (doc: Record<string, unknown>) => {
     const clean = sanitizeUsersDeep(doc) as Record<string, unknown>;
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify(clean) }],
+      content: [{ type: "text" as const, text: JSON.stringify(clean) }],
       structuredContent: clean,
     };
   };
 
   tool(
-    'search',
-    'Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.',
+    "search",
+    "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
     {
-      query: z.string().min(1).max(100).describe('Search text'),
-      projectId: z.string().optional().describe('Limit the search to one project'),
-      limit: z.number().int().positive().max(50).optional().describe('Max results, default 20'),
+      query: z.string().min(1).max(100).describe("Search text"),
+      projectId: z
+        .string()
+        .optional()
+        .describe("Limit the search to one project"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(50)
+        .optional()
+        .describe("Max results, default 20"),
     },
     async ({ query, projectId, limit }) => {
-      const qs = new URLSearchParams({ q: query, types: 'item,project,board', limit: String(limit ?? 20) });
-      if (projectId) qs.set('projectId', projectId);
-      const res = await getApi().request<{ results?: SearchHit[] }>('GET', `/search?${qs.toString()}`);
+      const qs = new URLSearchParams({
+        q: query,
+        types: "item,project,board",
+        limit: String(limit ?? 20),
+      });
+      if (projectId) qs.set("projectId", projectId);
+      const res = await getApi().request<{ results?: SearchHit[] }>(
+        "GET",
+        `/search?${qs.toString()}`,
+      );
       const results: Record<string, unknown>[] = [];
       for (const r of res?.results ?? []) {
         let ref: DocRef;
@@ -1775,30 +2988,43 @@ export function registerTools(
   );
 
   tool(
-    'fetch',
-    'One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.',
+    "fetch",
+    "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.",
     {
-      id: z.string().describe('An id from search, or an app URL path such as /projects/…/boards/…/items/…'),
-      organizationId: z.string().optional().describe('Only needed for project ids when the credential has no default organization; otherwise resolved automatically'),
+      id: z
+        .string()
+        .describe(
+          "An id from search, or an app URL path such as /projects/…/boards/…/items/…",
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Only needed for project ids when the credential has no default organization; otherwise resolved automatically",
+        ),
     },
     async ({ id, organizationId }) => {
       const ref = parseDocId(id);
       const api = getApi();
       const url = api.appUrl(docPath(ref));
-      if (ref.kind === 'item') {
-        const item = await api.request<any>('GET', docPath(ref));
+      if (ref.kind === "item") {
+        const item = await api.request<any>("GET", docPath(ref));
         return structured({
           id: docId(ref),
           title: item?.title ?? item?.name ?? ref.itemId,
           text: JSON.stringify(sanitizeUsersDeep(item), null, 2),
           url,
-          metadata: { type: 'item', projectId: ref.projectId, boardId: ref.boardId },
+          metadata: {
+            type: "item",
+            projectId: ref.projectId,
+            boardId: ref.boardId,
+          },
         });
       }
-      if (ref.kind === 'board') {
+      if (ref.kind === "board") {
         const [board, columns] = await Promise.all([
-          api.request<any>('GET', docPath(ref)),
-          api.request<any>('GET', `${docPath(ref)}/columns`),
+          api.request<any>("GET", docPath(ref)),
+          api.request<any>("GET", `${docPath(ref)}/columns`),
         ]);
         return structured({
           id: docId(ref),
@@ -1806,7 +3032,7 @@ export function registerTools(
           text: JSON.stringify(sanitizeUsersDeep({ board, columns }), null, 2),
           url,
           metadata: {
-            type: 'board',
+            type: "board",
             projectId: ref.projectId,
             columnCount: Array.isArray(columns) ? columns.length : undefined,
           },
@@ -1824,7 +3050,7 @@ export function registerTools(
         }
         const candidates: string[] = orgId ? [orgId] : [];
         if (!orgId) {
-          const orgs = await api.request<any>('GET', '/organizations');
+          const orgs = await api.request<any>("GET", "/organizations");
           for (const o of Array.isArray(orgs) ? orgs : (orgs?.items ?? [])) {
             if (o?.id) candidates.push(o.id);
           }
@@ -1832,16 +3058,22 @@ export function registerTools(
         let lastErr: unknown = null;
         for (const c of candidates) {
           try {
-            return await api.request<any>('GET', `/organizations/${c}/projects/${ref.projectId}`);
+            return await api.request<any>(
+              "GET",
+              `/organizations/${c}/projects/${ref.projectId}`,
+            );
           } catch (e) {
             lastErr = e;
           }
         }
-        throw lastErr ?? new Error(`Project ${ref.projectId} not found in any organization`);
+        throw (
+          lastErr ??
+          new Error(`Project ${ref.projectId} not found in any organization`)
+        );
       };
       const [project, boards] = await Promise.all([
         loadProject() as Promise<any>,
-        api.request<any>('GET', `${docPath(ref)}/boards`),
+        api.request<any>("GET", `${docPath(ref)}/boards`),
       ]);
       const boardList: unknown[] = Array.isArray(boards)
         ? boards
@@ -1849,9 +3081,13 @@ export function registerTools(
       return structured({
         id: docId(ref),
         title: project?.name ?? ref.projectId,
-        text: JSON.stringify(sanitizeUsersDeep({ project, boards: boardList }), null, 2),
+        text: JSON.stringify(
+          sanitizeUsersDeep({ project, boards: boardList }),
+          null,
+          2,
+        ),
         url,
-        metadata: { type: 'project', boardCount: boardList.length },
+        metadata: { type: "project", boardCount: boardList.length },
       });
     },
   );
@@ -1862,55 +3098,111 @@ export function registerTools(
   // at its root. A zip whose only top-level entry is a folder (how most
   // exporters and GitHub pack a build) is re-rooted rather than rejected.
   const normalizeBundle = (zip: AdmZip): AdmZip => {
-    const entries = zip.getEntries().filter((e) => !e.isDirectory && !e.entryName.startsWith('__MACOSX/'));
-    if (entries.some((e) => e.entryName === 'index.html')) return zip;
-    const tops = new Set(entries.map((e) => e.entryName.split('/')[0]));
+    const entries = zip
+      .getEntries()
+      .filter((e) => !e.isDirectory && !e.entryName.startsWith("__MACOSX/"));
+    if (entries.some((e) => e.entryName === "index.html")) return zip;
+    const tops = new Set(entries.map((e) => e.entryName.split("/")[0]));
     if (tops.size === 1) {
       const [top] = [...tops];
       if (entries.some((e) => e.entryName === `${top}/index.html`)) {
         const out = new AdmZip();
-        for (const e of entries) out.addFile(e.entryName.slice(top.length + 1), e.getData());
+        for (const e of entries)
+          out.addFile(e.entryName.slice(top.length + 1), e.getData());
         return out;
       }
     }
     throw new Error(
-      'The bundle has no index.html at its root. Pass the build OUTPUT (dist/, build/, out/), not the project source.',
+      "The bundle has no index.html at its root. Pass the build OUTPUT (dist/, build/, out/), not the project source.",
     );
   };
   const MAX_BUNDLE = 50 * 1024 * 1024;
   const checkBundleSize = (n: number) => {
     if (n > MAX_BUNDLE) {
-      throw new Error(`Bundle is ${Math.round(n / 1024 / 1024)}MB zipped — the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`);
+      throw new Error(
+        `Bundle is ${Math.round(n / 1024 / 1024)}MB zipped — the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`,
+      );
     }
   };
 
   tool(
-    'deploy_frontend',
-    'Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.',
+    "deploy_frontend",
+    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.",
     {
-      appId: z.string().describe('App UUID or slug (app-xxxxxx) — see list_apps'),
+      appId: z
+        .string()
+        .describe("App UUID or slug (app-xxxxxx) — see list_apps"),
       files: z
         .array(
           z.object({
-            path: z.string().describe('Path inside the site, e.g. "index.html", "app.js", "css/style.css"'),
-            content: z.string().describe('File content. Text as-is; binary as base64 with encoding "base64"'),
-            encoding: z.enum(['utf8', 'base64']).optional().describe('Default utf8'),
+            path: z
+              .string()
+              .describe(
+                'Path inside the site, e.g. "index.html", "app.js", "css/style.css"',
+              ),
+            content: z
+              .string()
+              .describe(
+                'File content. Text as-is; binary as base64 with encoding "base64"',
+              ),
+            encoding: z
+              .enum(["utf8", "base64"])
+              .optional()
+              .describe("Default utf8"),
           }),
         )
         .max(500)
         .optional()
-        .describe('The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation'),
-      zipUrl: z.string().url().optional().describe('Public https URL of a zip of the BUILD OUTPUT (index.html at the root, or inside a single top-level folder). Up to 50MB'),
-      dir: z.string().optional().describe('Local path to the BUILD OUTPUT directory (the one containing index.html), not the project root. Only where the MCP runs on the same machine as the files'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+        .describe(
+          "The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation",
+        ),
+      zipUrl: z
+        .string()
+        .url()
+        .optional()
+        .describe(
+          "Public https URL of a zip of the BUILD OUTPUT (index.html at the root, or inside a single top-level folder). Up to 50MB",
+        ),
+      dir: z
+        .string()
+        .optional()
+        .describe(
+          "Local path to the BUILD OUTPUT directory (the one containing index.html), not the project root. Only where the MCP runs on the same machine as the files",
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
-    async ({ appId, files, zipUrl, dir, organizationId }: { appId: string; files?: Array<{ path: string; content: string; encoding?: 'utf8' | 'base64' }>; zipUrl?: string; dir?: string; organizationId?: string }) => {
-      const given = [files ? 'files' : '', zipUrl ? 'zipUrl' : '', dir ? 'dir' : ''].filter(Boolean);
+    async ({
+      appId,
+      files,
+      zipUrl,
+      dir,
+      organizationId,
+    }: {
+      appId: string;
+      files?: Array<{
+        path: string;
+        content: string;
+        encoding?: "utf8" | "base64";
+      }>;
+      zipUrl?: string;
+      dir?: string;
+      organizationId?: string;
+    }) => {
+      const given = [
+        files ? "files" : "",
+        zipUrl ? "zipUrl" : "",
+        dir ? "dir" : "",
+      ].filter(Boolean);
       if (given.length !== 1) {
         throw new Error(
           given.length === 0
-            ? 'Pass the frontend as `files` (inline), `zipUrl` (public zip) or `dir` (local build folder).'
-            : `Pass only one of files / zipUrl / dir (got ${given.join(', ')}).`,
+            ? "Pass the frontend as `files` (inline), `zipUrl` (public zip) or `dir` (local build folder)."
+            : `Pass only one of files / zipUrl / dir (got ${given.join(", ")}).`,
         );
       }
       const orgId = await resolveOrg(organizationId);
@@ -1921,32 +3213,56 @@ export function registerTools(
         let total = 0;
         const seen = new Set<string>();
         for (const f of files) {
-          const rel = f.path.replace(/\\/g, '/').replace(/^\.?\//, '');
-          if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '')) {
-            throw new Error(`Bad file path "${f.path}": use a relative path inside the site, e.g. "assets/app.js".`);
+          const rel = f.path.replace(/\\/g, "/").replace(/^\.?\//, "");
+          if (
+            !rel ||
+            rel.startsWith("/") ||
+            rel.split("/").some((seg) => seg === ".." || seg === "")
+          ) {
+            throw new Error(
+              `Bad file path "${f.path}": use a relative path inside the site, e.g. "assets/app.js".`,
+            );
           }
           if (seen.has(rel)) throw new Error(`Duplicate file path "${rel}".`);
           seen.add(rel);
-          const data = Buffer.from(f.content, f.encoding === 'base64' ? 'base64' : 'utf8');
+          const data = Buffer.from(
+            f.content,
+            f.encoding === "base64" ? "base64" : "utf8",
+          );
           total += data.length;
           if (total > 8 * 1024 * 1024) {
-            throw new Error('Inline files exceed 8MB decoded. Build the site and pass a zipUrl (up to 50MB), or keep media out of the bundle.');
+            throw new Error(
+              "Inline files exceed 8MB decoded. Build the site and pass a zipUrl (up to 50MB), or keep media out of the bundle.",
+            );
           }
           zip.addFile(rel, data);
         }
-        if (!seen.has('index.html')) {
-          throw new Error(`files must include "index.html" at the root (got: ${[...seen].slice(0, 8).join(', ')}${seen.size > 8 ? ', …' : ''}).`);
+        if (!seen.has("index.html")) {
+          throw new Error(
+            `files must include "index.html" at the root (got: ${[...seen].slice(0, 8).join(", ")}${seen.size > 8 ? ", …" : ""}).`,
+          );
         }
         buffer = zip.toBuffer();
       } else if (zipUrl) {
         const u = new URL(zipUrl);
-        if (u.protocol !== 'https:') throw new Error('zipUrl must be https.');
-        if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(u.hostname) || /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) {
-          throw new Error('zipUrl must point at a public host, not a private address.');
+        if (u.protocol !== "https:") throw new Error("zipUrl must be https.");
+        if (
+          /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(
+            u.hostname,
+          ) ||
+          /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)
+        ) {
+          throw new Error(
+            "zipUrl must point at a public host, not a private address.",
+          );
         }
-        const res = await fetch(zipUrl, { redirect: 'follow', headers: { accept: 'application/zip, application/octet-stream, */*' } });
-        if (!res.ok) throw new Error(`Could not download zipUrl: HTTP ${res.status}.`);
-        const declared = Number(res.headers.get('content-length') || 0);
+        const res = await fetch(zipUrl, {
+          redirect: "follow",
+          headers: { accept: "application/zip, application/octet-stream, */*" },
+        });
+        if (!res.ok)
+          throw new Error(`Could not download zipUrl: HTTP ${res.status}.`);
+        const declared = Number(res.headers.get("content-length") || 0);
         checkBundleSize(declared);
         const raw = Buffer.from(await res.arrayBuffer());
         checkBundleSize(raw.length);
@@ -1954,17 +3270,21 @@ export function registerTools(
         try {
           zip = new AdmZip(raw);
         } catch {
-          throw new Error('zipUrl did not return a zip file. Point it at the archive itself (a GitHub release asset, an export download), not at a page.');
+          throw new Error(
+            "zipUrl did not return a zip file. Point it at the archive itself (a GitHub release asset, an export download), not at a page.",
+          );
         }
         buffer = normalizeBundle(zip).toBuffer();
       } else {
         const abs = resolvePath(dir as string);
         if (!existsSync(abs) || !statSync(abs).isDirectory()) {
-          throw new Error(`Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/). If the MCP is not running on the machine with the files, pass them as \`files\` or a \`zipUrl\` instead.`);
+          throw new Error(
+            `Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/). If the MCP is not running on the machine with the files, pass them as \`files\` or a \`zipUrl\` instead.`,
+          );
         }
-        if (!existsSync(joinPath(abs, 'index.html'))) {
-          const candidate = ['dist', 'build', 'out'].find((d) =>
-            existsSync(joinPath(abs, d, 'index.html')),
+        if (!existsSync(joinPath(abs, "index.html"))) {
+          const candidate = ["dist", "build", "out"].find((d) =>
+            existsSync(joinPath(abs, d, "index.html")),
           );
           throw new Error(
             candidate
@@ -1980,8 +3300,8 @@ export function registerTools(
 
       const result = await getApi().requestUpload<Record<string, unknown>>(
         `/organizations/${orgId}/apps/${appId}/deployments`,
-        'file',
-        'frontend.zip',
+        "file",
+        "frontend.zip",
         buffer,
       );
       // The server's `published` means "this deploy is the one that published
@@ -1991,36 +3311,60 @@ export function registerTools(
       return ok({
         ...rest,
         appPublished: true,
-        note: `Live now${publishedByThisDeploy ? ' (this deploy also published the app)' : ''}. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.`,
+        note: `Live now${publishedByThisDeploy ? " (this deploy also published the app)" : ""}. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.`,
       });
     },
   );
 
   tool(
-    'list_deployments',
-    'List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.',
-    { appId: z.string().describe('App id or slug (from list_apps / create_app)'), organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted') },
+    "list_deployments",
+    "List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.",
+    {
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
     async ({ appId, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
-        await getApi().request('GET', `/organizations/${orgId}/apps/${appId}/deployments`),
+        await getApi().request(
+          "GET",
+          `/organizations/${orgId}/apps/${appId}/deployments`,
+        ),
       );
     },
   );
 
   tool(
-    'rollback_deployment',
-    'Point the live URL back at a previous deployment version (see list_deployments for available versions).',
+    "rollback_deployment",
+    "Point the live URL back at a previous deployment version (see list_deployments for available versions).",
     {
-      appId: z.string().describe('App id or slug (from list_apps / create_app)'),
-      version: z.number().int().positive().describe('Deployment version number (from list_deployments)'),
-      organizationId: z.string().optional().describe('Organization id; defaults to the credential organization when omitted'),
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      version: z
+        .number()
+        .int()
+        .positive()
+        .describe("Deployment version number (from list_deployments)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
     },
     async ({ appId, version, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
       return ok(
         await getApi().request(
-          'POST',
+          "POST",
           `/organizations/${orgId}/apps/${appId}/deployments/${version}/activate`,
         ),
       );
