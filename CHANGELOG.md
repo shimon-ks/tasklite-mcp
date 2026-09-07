@@ -3,6 +3,14 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.10.1 — 2026-09-07
+
+### Fixed
+- `build_backend` no longer leaves a half-built project behind. When the
+  plan does not allow another published app it says so before creating
+  anything, and if any later step fails it removes the project and the app
+  it made instead of naming them in an error.
+
 ## 0.10.0 — 2026-09-06
 
 ### Added

@@ -1197,8 +1197,36 @@ export function registerTools(
       if (problems.length) return ok({ built: false, problems });
 
       const orgId = await resolveOrg(organizationId);
+
       const client = getApi();
       const notes: string[] = [];
+      // Publishing an app is the one step that can be refused by the plan.
+      // Ask first: a refusal after the project exists leaves a half-built
+      // backend behind, which is worse than never starting.
+      if (api) {
+        try {
+          const sub = await client.request<any>('GET', `/organizations/${orgId}/subscription`);
+          const allowed = sub?.plan?.features?.limits?.publishedApps;
+          if (typeof allowed === 'number') {
+            const apps = await client.request<any>('GET', `/organizations/${orgId}/apps`);
+            const list: any[] = Array.isArray(apps) ? apps : (apps?.items ?? apps?.data ?? []);
+            const published = list.filter((a) => a?.status === 'published' && !a?.deletedAt).length;
+            if (published >= allowed) {
+              return ok({
+                built: false,
+                problems: [
+                  `The ${sub?.plan?.name ?? 'current'} plan allows ${allowed} published app${allowed === 1 ? '' : 's'} and this organization already has ${published}. Nothing was created. Archive an app, upgrade the plan, or call build_backend again without "api" to build the project and publish later.`,
+                ],
+              });
+            }
+          }
+        } catch {
+          // No subscription endpoint, or no permission to read it: fall
+          // through and let the publish call itself answer.
+        }
+      }
+
+      let createdAppId: string | undefined;
       const created = await client.request<any>('POST', `/organizations/${orgId}/projects`, {
         name: project.name,
         organizationId: orgId,
@@ -1333,6 +1361,7 @@ export function registerTools(
             name: api.name || `${project.name} API`,
             projectId: created.id,
           });
+          createdAppId = app.id;
           await client.request('POST', `/organizations/${orgId}/apps/${app.id}/publish`, {});
           const methods = api.methods?.length ? api.methods : ['GET', 'POST', 'PATCH', 'DELETE'];
           const endpoints: Array<Record<string, unknown>> = [];
@@ -1388,9 +1417,25 @@ export function registerTools(
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `build_backend stopped: ${message}. Project "${project.name}" (${created.id}) was created and may be partial — fix the spec and call again with a new project name, or delete it at ${client.appUrl(`/projects/${created.id}`)}.`,
-        );
+        // Undo what this call made. A half-built project the caller did not
+        // ask for is worse than no project: it takes a name, shows up in
+        // lists, and its app counts against the plan.
+        const undone: string[] = [];
+        try {
+          if (createdAppId) {
+            await client.request('DELETE', `/organizations/${orgId}/apps/${createdAppId}`);
+            undone.push('app');
+          }
+          await client.request('DELETE', `/organizations/${orgId}/projects/${created.id}`);
+          undone.push('project');
+        } catch {
+          // Cleanup itself failed: say so rather than pretend.
+        }
+        const tail =
+          undone.includes('project')
+            ? ' Nothing was left behind — the project and everything in it were removed.'
+            : ` The project "${project.name}" (${created.id}) could not be removed automatically; delete it at ${client.appUrl(`/projects/${created.id}`)}.`;
+        throw new Error(`build_backend stopped: ${message}.${tail} Fix the spec and call again.`);
       }
     },
   );
