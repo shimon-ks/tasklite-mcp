@@ -1,12 +1,14 @@
 {
   "name": "tasklite",
-  "version": "0.7.0",
-  "description": "Build a real backend from Gemini CLI: boards, typed columns, data, automations, REST API and a ready-made admin — TaskLite over MCP.",
+  "version": "0.14.0",
+  "description": "TaskLite (tasklite.net) over MCP — a hosted backend and admin for apps you build with Gemini CLI: typed tables, relations, data, automations, a REST API and an admin the business itself operates.",
   "mcpServers": {
     "tasklite": {
       "httpUrl": "https://mcp.tasklite.net/mcp",
       "authProviderType": "dynamic_discovery",
-      "oauth": { "enabled": true },
+      "oauth": {
+        "enabled": true
+      },
       "timeout": 60000
     }
   },
