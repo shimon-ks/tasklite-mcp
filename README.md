@@ -1,8 +1,43 @@
 # @tasklite/mcp
 
-**Documentation: https://tasklite.net/docs**
+[![npm](https://img.shields.io/npm/v/@tasklite/mcp)](https://www.npmjs.com/package/@tasklite/mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-net.tasklite%2Fmcp-blue)](https://registry.modelcontextprotocol.io)
+[![license](https://img.shields.io/npm/l/@tasklite/mcp)](./LICENSE)
 
-TaskLite MCP server. Build a full backend from Claude Code (projects, boards, typed columns, data, REST endpoints with API keys), deploy a frontend onto it, and hand your client a ready-made admin.
+**A backend and an admin for apps built by AI agents — [tasklite.net](https://tasklite.net) · [docs](https://tasklite.net/docs)**
+
+Describe a system and get the thing behind it: a project with typed tables and
+relations, rows, REST endpoints, an API key, and an admin interface the
+business itself operates afterwards. From Claude Code, Claude Desktop, ChatGPT,
+Gemini, Cursor or VS Code. Deploy a frontend onto it and hand the whole thing
+over.
+
+> **Not the CLI task manager.** There is an older, unrelated project also called
+> TaskLite — [ad-si/TaskLite](https://github.com/ad-si/TaskLite) at
+> [tasklite.org](https://tasklite.org), a command-line task manager. This is a
+> different product from a different author: a hosted backend at
+> **tasklite.net**, published as `@tasklite/mcp` and as `net.tasklite/mcp` in
+> the MCP registry.
+
+## The 48 tools
+
+Every tool declares `readOnlyHint`, `destructiveHint` and `openWorldHint`, so a
+client can tell what is safe to run unattended.
+
+| Area | Tools |
+| --- | --- |
+| Account | `sign_up` `connect` `login` `disconnect` `connection_status` `list_organizations` `configure_external_access` |
+| Structure | `create_project` `create_board` `create_column` `update_board` `update_column` `delete_board` `delete_column` `delete_project` `reorder_columns` `get_board_schema` `list_projects` `list_boards` `export_project` |
+| Data | `query_items` `create_item` `update_item` `set_cell` `delete_item` `search` `fetch` |
+| Comments | `list_comments` `add_comment` `update_comment` `delete_comment` |
+| Apps and API | `build_backend` `create_app` `publish_app` `list_apps` `get_app_spec` `create_app_endpoint` `list_app_endpoints` `update_app_endpoint` `create_app_api_key` |
+| Frontend hosting | `deploy_frontend` `list_deployments` `rollback_deployment` `get_frontend_prompt` |
+| Automation and push | `create_automation` `list_automations` `push_status` `send_test_push` |
+
+`build_backend` is the one to reach for first: it takes a description of a
+system and creates the project, the boards, their typed columns including the
+relations between them, sample rows, and a published REST API with a key — in
+one call, instead of a dozen.
 
 ## Setup
 

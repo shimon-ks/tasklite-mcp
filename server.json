@@ -2,9 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "net.tasklite/mcp",
   "title": "TaskLite",
-  "description": "Build a real backend from Claude: boards, data, REST APIs and a ready-made admin UI",
+  "description": "tasklite.net: hosted backend, REST API and admin for apps built by AI agents",
   "version": "0.14.0",
   "websiteUrl": "https://tasklite.net/docs",
+  "repository": {
+    "url": "https://github.com/shimon-ks/tasklite-mcp",
+    "source": "github"
+  },
   "remotes": [
     {
       "type": "streamable-http",
