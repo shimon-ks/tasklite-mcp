@@ -14,7 +14,7 @@ ask for email, name, and a business name, then call sign_up (creates account +
 org from here; a password is set locally and never shown). (sign_up exists only
 on the local install; hosted connections authenticate via OAuth.)
 
-Finding your way around an existing account: list_projects then list_boards. Changing a model after the fact: update_column (name, type, options), delete_column, reorder_columns, update_board, delete_board — no need to rebuild. create_item saves the title and all cells in one call. Column rules (settings.validation: unique, min/max, pattern) and closed-choice options are enforced on every write, so a 400 names the column and the rule. Automations can pause with a delay action and retry network actions (config.retry). export_project returns the project as JSON. To find something by text across the whole organization: search, then fetch the id it returns.
+Finding your way around an existing account: list_projects then list_boards. Changing a model after the fact: update_column (name, type, options), delete_column, reorder_columns, update_board, delete_board, no need to rebuild. create_item saves the title and all cells in one call. Column rules (settings.validation: unique, min/max, pattern) and closed-choice options are enforced on every write, so a 400 names the column and the rule. Automations can pause with a delay action and retry network actions (config.retry). export_project returns the project as JSON. To find something by text across the whole organization: search, then fetch the id it returns.
 Both page at 50, so read the total before concluding something is missing.
 
 Build order: create_project -> create_board -> create_column per field, then
@@ -60,7 +60,7 @@ sends X-App-User: <user id> with the key, and endpoints with rowLevelSecurity
 return, update and delete only that user's rows. No user system to build.
 
 TaskLite also HOSTS static frontends. deploy_frontend takes the site in one
-of three ways: files (inline path+content — from ChatGPT or any hosted client,
+of three ways: files (inline path+content, from ChatGPT or any hosted client,
 write index.html and its assets and deploy in the same turn), zipUrl (a public
 https zip such as a Lovable/Bolt export or a GitHub release asset), or dir (a
 local build folder, only when the MCP runs next to the files). The result is a
@@ -77,9 +77,9 @@ itemId (get itemId from query_items).
 When the app's users should be TaskLite external users instead (the app
 signs them up through POST /auth/register-external with the organizationId
 and logs them in through POST /auth/login), the organization decides who gets
-in: configure_external_access sets the registration policy ("open" — in at
-once; "approval" — an admin approves each one, and TaskLite mails the org's
-admins on every signup; "closed" — invite only) and appLoginUrl, the page of
+in: configure_external_access sets the registration policy ("open", in at
+once; "approval", an admin approves each one, and TaskLite mails the org's
+admins on every signup; "closed", invite only) and appLoginUrl, the page of
 YOUR app where those users log in. Set appLoginUrl whenever you deploy such an
 app: it is the "Log in" button in the approval email, and without it the
 approved user is told nothing about where to go. Unapproved users are never

@@ -7,7 +7,7 @@
  *  - anything else is treated as a ready TaskLite JWT (hosted/OAuth mode)
  *    and sent as-is.
  *
- * No LLM calls, no global state — safe for one instance per HTTP request.
+ * No LLM calls, no global state, safe for one instance per HTTP request.
  */
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -150,7 +150,7 @@ export class TaskLiteApi {
    * The organization to use when a tool call names none. An API key carries
    * its organization. An OAuth user (every ChatGPT and Claude web session)
    * carries nothing, so the only safe default is the single organization they
-   * can write to; with several, the caller has to choose — see resolveOrg in
+   * can write to; with several, the caller has to choose, see resolveOrg in
    * tools.ts, which lists the candidates in the error so one call suffices.
    */
   async defaultOrganizationId(): Promise<string | null> {

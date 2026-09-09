@@ -39,7 +39,7 @@
     },
     {
       "name": "configure_external_access",
-      "description": "Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: \"open\" — in at once; \"approval\" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); \"closed\" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the \"Log in\" button in the approval email, so set it whenever you deploy an app that uses this flow; pass \"\" to clear. Call with no changes to just read the current settings. Requires organization admin.",
+      "description": "Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: \"open\", in at once; \"approval\", an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); \"closed\", invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in, it becomes the \"Log in\" button in the approval email, so set it whenever you deploy an app that uses this flow; pass \"\" to clear. Call with no changes to just read the current settings. Requires organization admin.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -77,7 +77,7 @@
     },
     {
       "name": "list_projects",
-      "description": "List projects in an organization. The API returns 50 per page — an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
+      "description": "List projects in an organization. The API returns 50 per page, an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -109,7 +109,7 @@
     },
     {
       "name": "list_boards",
-      "description": "List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
+      "description": "List the boards inside a project, id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -179,7 +179,7 @@
     },
     {
       "name": "create_board",
-      "description": "Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: \"tasks\" (default) also gives the board the built-in task columns — status, priority, assignee, due date, tags — for work people track; \"data\" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).",
+      "description": "Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: \"tasks\" (default) also gives the board the built-in task columns, status, priority, assignee, due date, tags, for work people track; \"data\" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -223,7 +223,7 @@
     },
     {
       "name": "create_column",
-      "description": "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
+      "description": "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning, date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage }, enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -246,7 +246,7 @@
           "settings": {
             "type": "object",
             "additionalProperties": {},
-            "description": "Type-specific settings. For dropdown/status/priority: options, either as labels [\"A\",\"B\"] or as full objects [{value,label,color}] — labels are expanded server-side, and colors are assigned if you do not supply them."
+            "description": "Type-specific settings. For dropdown/status/priority: options, either as labels [\"A\",\"B\"] or as full objects [{value,label,color}], labels are expanded server-side, and colors are assigned if you do not supply them."
           },
           "isRequired": {
             "type": "boolean",
@@ -351,7 +351,7 @@
     },
     {
       "name": "delete_board",
-      "description": "Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.",
+      "description": "Delete a board with every item on it. Destructive and not undoable, confirm with the user first, and prefer delete_column when only part of the model is wrong.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -481,7 +481,7 @@
     },
     {
       "name": "delete_column",
-      "description": "Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
+      "description": "Delete a column and every value stored in it. Destructive, confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -560,7 +560,7 @@
     },
     {
       "name": "export_project",
-      "description": "The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
+      "description": "The whole project as JSON, boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -597,7 +597,7 @@
     },
     {
       "name": "query_items",
-      "description": "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.",
+      "description": "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar, filter[column][gte], relation filters, per-field search, see get_app_spec.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -862,7 +862,7 @@
     },
     {
       "name": "delete_item",
-      "description": "Delete an item. Destructive — confirm with the user before calling.",
+      "description": "Delete an item. Destructive, confirm with the user before calling.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1035,7 +1035,7 @@
     },
     {
       "name": "delete_comment",
-      "description": "Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.",
+      "description": "Delete a comment from an item thread. Destructive, confirm with the user before calling. Needs projectId, itemId and the commentId.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1072,7 +1072,7 @@
     },
     {
       "name": "create_app",
-      "description": "Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
+      "description": "Create an app, a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1186,7 +1186,7 @@
     },
     {
       "name": "publish_app",
-      "description": "Publish an app — required before its API endpoints accept external calls.",
+      "description": "Publish an app, required before its API endpoints accept external calls.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1261,7 +1261,7 @@
                 },
                 "alias": {
                   "type": "string",
-                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status."
+                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId, a business status column becomes repairStatus or orderStatus, not status."
                 },
                 "readOnly": {
                   "type": "boolean",
@@ -1319,7 +1319,7 @@
     },
     {
       "name": "list_app_endpoints",
-      "description": "List an app's REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
+      "description": "List an app's REST endpoints, slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1350,7 +1350,7 @@
     },
     {
       "name": "update_app_endpoint",
-      "description": "Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
+      "description": "Change an existing endpoint, most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1394,7 +1394,7 @@
                 },
                 "alias": {
                   "type": "string",
-                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status."
+                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId, a business status column becomes repairStatus or orderStatus, not status."
                 },
                 "readOnly": {
                   "type": "boolean",
@@ -1436,7 +1436,7 @@
     },
     {
       "name": "create_app_api_key",
-      "description": "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
+      "description": "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes), never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1482,7 +1482,7 @@
     },
     {
       "name": "build_backend",
-      "description": "Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system (\"a backend for my repair shop: customers, orders, payments\") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type \"relation\", relatedBoard: \"<board name in this spec>\", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind \"data\": only the columns you define, no task fields); set kind \"tasks\" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.",
+      "description": "Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system (\"a backend for my repair shop: customers, orders, payments\") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design, pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type \"relation\", relatedBoard: \"<board name in this spec>\", relationType: many_to_one for an order→customer link), and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind \"data\": only the columns you define, no task fields); set kind \"tasks\" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1523,7 +1523,7 @@
                     "tasks",
                     "data"
                   ],
-                  "description": "\"data\" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. \"tasks\": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do."
+                  "description": "\"data\" (default here): a plain table with only the columns you define, right for customers, products, orders, payments. \"tasks\": also the built-in task columns (status, priority, assignee, due date, tags), only for boards where people track work to do."
                 },
                 "columns": {
                   "type": "array",
@@ -1566,7 +1566,7 @@
                           "many_to_many",
                           "one_to_one"
                         ],
-                        "description": "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it."
+                        "description": "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means, say it."
                       },
                       "settings": {
                         "type": "object",
@@ -1657,7 +1657,7 @@
     },
     {
       "name": "create_automation",
-      "description": "Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the \"scheduled\" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: \"delay\", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.",
+      "description": "Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns, pair it with the \"scheduled\" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: \"delay\", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1771,7 +1771,7 @@
     },
     {
       "name": "list_apps",
-      "description": "List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
+      "description": "List the apps in the organization, id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1795,7 +1795,7 @@
     },
     {
       "name": "get_app_spec",
-      "description": "Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.",
+      "description": "Get the machine-readable spec of an app (base URL, endpoints, methods, fields), use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute, use it verbatim, do not rebuild it from the admin URL.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1826,7 +1826,7 @@
     },
     {
       "name": "get_frontend_prompt",
-      "description": "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.",
+      "description": "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx), use list_apps to find it.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1869,7 +1869,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
+      "description": "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] }, the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1908,7 +1908,7 @@
     },
     {
       "name": "fetch",
-      "description": "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.",
+      "description": "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata }, the ChatGPT fetch contract; text is the record as JSON.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1939,13 +1939,13 @@
     },
     {
       "name": "deploy_frontend",
-      "description": "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.",
+      "description": "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "appId": {
             "type": "string",
-            "description": "App UUID or slug (app-xxxxxx) — see list_apps"
+            "description": "App UUID or slug (app-xxxxxx), see list_apps"
           },
           "files": {
             "type": "array",
@@ -1976,7 +1976,7 @@
               "additionalProperties": false
             },
             "maxItems": 500,
-            "description": "The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation"
+            "description": "The site files inline. Must include index.html. Up to 500 files / 8MB decoded, right for a frontend written in the conversation"
           },
           "zipUrl": {
             "type": "string",
@@ -2010,7 +2010,7 @@
     },
     {
       "name": "list_deployments",
-      "description": "List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.",
+      "description": "List the hosted-frontend deployments of an app, versions, which one is live, and the public URL.",
       "inputSchema": {
         "type": "object",
         "properties": {

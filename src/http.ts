@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TaskLite MCP — hosted HTTP entry (mcp.tasklite.net).
+ * TaskLite MCP, hosted HTTP entry (mcp.tasklite.net).
  *
  * Streamable HTTP transport, stateless: every POST /mcp carries the caller's
  * own credential in the Authorization header (Bearer tl_... key, or a TaskLite
@@ -11,7 +11,7 @@
  *   claude mcp add --transport http tasklite https://mcp.tasklite.net/mcp \
  *     --header "Authorization: Bearer tl_xxx"
  *
- * OAuth discovery for Claude Desktop/web connectors is the next phase —
+ * OAuth discovery for Claude Desktop/web connectors is the next phase -
  * this server already returns spec-compliant 401 + WWW-Authenticate.
  */
 import http from 'node:http';
@@ -61,7 +61,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, service: 'tasklite-mcp', version: VERSION });
   }
 
-  // RFC 9728 — lets MCP clients discover the auth server with no config.
+  // RFC 9728, lets MCP clients discover the auth server with no config.
   if (url.pathname === '/.well-known/oauth-protected-resource') {
     return sendJson(res, 200, {
       resource: RESOURCE_URL,
@@ -79,7 +79,7 @@ const server = http.createServer(async (req, res) => {
     // Stateless mode: no server-initiated SSE stream, no sessions to delete.
     return sendJson(res, 405, {
       jsonrpc: '2.0',
-      error: { code: -32000, message: 'Method not allowed — POST only (stateless mode)' },
+      error: { code: -32000, message: 'Method not allowed, POST only (stateless mode)' },
       id: null,
     });
   }
@@ -109,7 +109,7 @@ const server = http.createServer(async (req, res) => {
       { name: 'tasklite', version: VERSION },
       { instructions: SERVER_INSTRUCTIONS },
     );
-    registerTools(mcp, getApi); // no onboarding tools in hosted mode — auth is the front door
+    registerTools(mcp, getApi); // no onboarding tools in hosted mode, auth is the front door
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => {
       transport.close();

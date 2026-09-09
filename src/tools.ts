@@ -1,7 +1,7 @@
 /**
  * All TaskLite MCP tools, bound to a credential-scoped TaskLiteApi via getApi().
  * Used by both entries: stdio (index.ts, single user) and HTTP (http.ts,
- * one api instance per authenticated request). Deterministic by design —
+ * one api instance per authenticated request). Deterministic by design -
  * zero LLM calls (docs/specs/MCP_SERVER_SPEC.md).
  */
 import { randomBytes } from "node:crypto";
@@ -31,7 +31,7 @@ export interface OnboardingHooks {
 }
 
 // Every tool response funnels through here, which makes this the one place that
-// can guarantee no internal user row leaves the server — see sanitizeUsersDeep.
+// can guarantee no internal user row leaves the server, see sanitizeUsersDeep.
 function ok(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
     content: [
@@ -41,7 +41,7 @@ function ok(data: unknown): { content: Array<{ type: "text"; text: string }> } {
 }
 
 // Several endpoints embed a user relation as the full internal record (email,
-// googleId, phone, telegram id, reset-password token, MFA state, …) — comments
+// googleId, phone, telegram id, reset-password token, MFA state, …), comments
 // as the author, projects as the owner, and any other `relations: ['user']`
 // read. The backend narrows comments only, so until it narrows the rest, strip
 // any user-shaped object here, on every response. Detection keys on
@@ -76,10 +76,10 @@ export function sanitizeUsersDeep(value: unknown): unknown {
   return value;
 }
 
-// Directory requirement: every tool carries a title and a safety hint —
+// Directory requirement: every tool carries a title and a safety hint -
 // readOnlyHint for reads, destructiveHint for irreversible writes.
 /**
- * Semantic type guard for create_column — the MCP-side twin of the
+ * Semantic type guard for create_column, the MCP-side twin of the
  * architect's "mandatory semantic mapping" table.
  *
  * Matchers are deliberately narrow (word-ish boundaries, notes exempt) so a
@@ -136,7 +136,7 @@ function columnTypeObjection(
     !(settings as any)?.options?.length
   ) {
     return {
-      rejected: `${type} column "${name}" has no settings.options — it would render as an empty select.`,
+      rejected: `${type} column "${name}" has no settings.options, it would render as an empty select.`,
       suggestedType: type,
       retry: `Call create_column again with settings.options as an array of the real choice labels.`,
     };
@@ -147,8 +147,8 @@ function columnTypeObjection(
 /**
  * Every tool declares all three hints explicitly.
  *
- * A missing hint is not the same as a false one: a client — and a directory
- * reviewer — cannot tell "this tool does not reach the open internet" from
+ * A missing hint is not the same as a false one: a client, and a directory
+ * reviewer, cannot tell "this tool does not reach the open internet" from
  * "nobody said". The three are:
  *
  * - readOnlyHint: the call changes nothing.
@@ -492,7 +492,7 @@ export function registerTools(
     );
   };
 
-  // ── Onboarding (stdio mode only — hosted mode authenticates via OAuth) ────
+  // ── Onboarding (stdio mode only, hosted mode authenticates via OAuth) ────
 
   if (onboarding) {
     tool(
@@ -525,7 +525,7 @@ export function registerTools(
 
     tool(
       "sign_up",
-      'Create a brand-new TaskLite account + organization and connect this machine — no website visit needed. A strong random password is generated locally and never shown or stored; for web access the user later uses "forgot password" with this email. Ask the user for email, their name, and a business name before calling.',
+      'Create a brand-new TaskLite account + organization and connect this machine, no website visit needed. A strong random password is generated locally and never shown or stored; for web access the user later uses "forgot password" with this email. Ask the user for email, their name, and a business name before calling.',
       {
         email: z.string().email().describe("Email address"),
         name: z.string().describe("The user's full name"),
@@ -585,7 +585,7 @@ export function registerTools(
 
     tool(
       "connect",
-      'Connect this machine to an existing TaskLite account, or switch to a different one. Takes a personal API key (tl_...) created at TaskLite → Integrations → "Connect Claude Code". Replaces the current connection if there is one — use this to switch user or organization. The switch takes effect immediately; no restart.',
+      'Connect this machine to an existing TaskLite account, or switch to a different one. Takes a personal API key (tl_...) created at TaskLite → Integrations → "Connect Claude Code". Replaces the current connection if there is one, use this to switch user or organization. The switch takes effect immediately; no restart.',
       {
         apiKey: z
           .string()
@@ -622,7 +622,7 @@ export function registerTools(
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This switch applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.",
+                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This switch applies to the running server, but the next start will use the env var again, remove it from your MCP server config to make this permanent.",
               }
             : {}),
         });
@@ -702,7 +702,7 @@ export function registerTools(
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This login applies to the running server, but the next start will use the env var again — remove it from your MCP server config to make this permanent.",
+                  "TASKLITE_API_KEY is set in this environment and takes precedence over the saved file. This login applies to the running server, but the next start will use the env var again, remove it from your MCP server config to make this permanent.",
               }
             : {}),
         });
@@ -724,7 +724,7 @@ export function registerTools(
           ...(envApiKeyOverrides()
             ? {
                 warning:
-                  "TASKLITE_API_KEY is still set in this environment. The running server is disconnected, but the next start will reconnect from that env var — remove it from your MCP server config for a real disconnect.",
+                  "TASKLITE_API_KEY is still set in this environment. The running server is disconnected, but the next start will reconnect from that env var, remove it from your MCP server config for a real disconnect.",
               }
             : {}),
         });
@@ -743,7 +743,7 @@ export function registerTools(
 
   tool(
     "configure_external_access",
-    'Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth) get into an organization. They have two ways in, and both obey the policy below: email and password (POST /auth/register-external with this organizationId, then POST /auth/login), or Google (POST /auth/google-external with a Google ID token and this organizationId). Either way the answer carries a token the app sends as Authorization: Bearer on every App API call. registrationPolicy: "open" — in at once; "approval" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); "closed" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the "Log in" button in the approval email, so set it whenever you deploy an app that uses this flow; pass "" to clear. Call with no changes to just read the current settings. Requires organization admin.',
+    'Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth) get into an organization. They have two ways in, and both obey the policy below: email and password (POST /auth/register-external with this organizationId, then POST /auth/login), or Google (POST /auth/google-external with a Google ID token and this organizationId). Either way the answer carries a token the app sends as Authorization: Bearer on every App API call. registrationPolicy: "open", in at once; "approval", an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); "closed", invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in, it becomes the "Log in" button in the approval email, so set it whenever you deploy an app that uses this flow; pass "" to clear. Call with no changes to just read the current settings. Requires organization admin.',
     {
       organizationId: z
         .string()
@@ -802,7 +802,7 @@ export function registerTools(
 
   tool(
     "list_projects",
-    "List projects in an organization. The API returns 50 per page — an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
+    "List projects in an organization. The API returns 50 per page, an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
     {
       organizationId: z
         .string()
@@ -828,7 +828,7 @@ export function registerTools(
 
   tool(
     "list_boards",
-    "List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
+    "List the boards inside a project, id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
     {
       projectId: z
         .string()
@@ -880,7 +880,7 @@ export function registerTools(
 
   tool(
     "create_board",
-    'Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: "tasks" (default) also gives the board the built-in task columns — status, priority, assignee, due date, tags — for work people track; "data" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).',
+    'Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: "tasks" (default) also gives the board the built-in task columns, status, priority, assignee, due date, tags, for work people track; "data" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).',
     {
       projectId: z
         .string()
@@ -914,7 +914,7 @@ export function registerTools(
 
   tool(
     "create_column",
-    "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
+    "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning, date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage }, enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
     {
       projectId: z
         .string()
@@ -932,7 +932,7 @@ export function registerTools(
         .record(z.any())
         .optional()
         .describe(
-          'Type-specific settings. For dropdown/status/priority: options, either as labels ["A","B"] or as full objects [{value,label,color}] — labels are expanded server-side, and colors are assigned if you do not supply them.',
+          'Type-specific settings. For dropdown/status/priority: options, either as labels ["A","B"] or as full objects [{value,label,color}], labels are expanded server-side, and colors are assigned if you do not supply them.',
         ),
       isRequired: z
         .boolean()
@@ -948,7 +948,7 @@ export function registerTools(
     async ({ projectId, boardId, name, type, settings, isRequired, force }) => {
       // The corrective loop: a model asking for text where the name announces
       // a date/phone/price gets the mismatch back as a tool result and fixes
-      // itself on the very next call — instructions alone are advisory, this
+      // itself on the very next call, instructions alone are advisory, this
       // is enforcement. (A real user built 110 rows with "Install Date" as
       // text; every calendar view and reminder was dead on arrival.)
       if (!force) {
@@ -1023,7 +1023,7 @@ export function registerTools(
 
   tool(
     "delete_board",
-    "Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.",
+    "Delete a board with every item on it. Destructive and not undoable, confirm with the user first, and prefer delete_column when only part of the model is wrong.",
     {
       projectId: z
         .string()
@@ -1145,7 +1145,7 @@ export function registerTools(
 
   tool(
     "delete_column",
-    "Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
+    "Delete a column and every value stored in it. Destructive, confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
     {
       projectId: z
         .string()
@@ -1192,7 +1192,7 @@ export function registerTools(
 
   tool(
     "export_project",
-    "The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
+    "The whole project as JSON, boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
     {
       projectId: z
         .string()
@@ -1237,7 +1237,7 @@ export function registerTools(
 
   tool(
     "query_items",
-    "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.",
+    "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar, filter[column][gte], relation filters, per-field search, see get_app_spec.",
     {
       projectId: z
         .string()
@@ -1519,7 +1519,7 @@ export function registerTools(
 
   tool(
     "delete_item",
-    "Delete an item. Destructive — confirm with the user before calling.",
+    "Delete an item. Destructive, confirm with the user before calling.",
     {
       projectId: z
         .string()
@@ -1631,7 +1631,7 @@ export function registerTools(
 
   tool(
     "delete_comment",
-    "Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.",
+    "Delete a comment from an item thread. Destructive, confirm with the user before calling. Needs projectId, itemId and the commentId.",
     {
       projectId: z
         .string()
@@ -1654,7 +1654,7 @@ export function registerTools(
 
   tool(
     "create_app",
-    "Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
+    "Create an app, a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
     {
       name: z.string().describe("Human-readable name"),
       projectId: z
@@ -1785,7 +1785,7 @@ export function registerTools(
 
   tool(
     "publish_app",
-    "Publish an app — required before its API endpoints accept external calls.",
+    "Publish an app, required before its API endpoints accept external calls.",
     {
       appId: z
         .string()
@@ -1837,7 +1837,7 @@ export function registerTools(
               .string()
               .optional()
               .describe(
-                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.",
+                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId, a business status column becomes repairStatus or orderStatus, not status.",
               ),
             readOnly: z
               .boolean()
@@ -1897,7 +1897,7 @@ export function registerTools(
 
   tool(
     "list_app_endpoints",
-    "List an app's REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
+    "List an app's REST endpoints, slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
     {
       appId: z
         .string()
@@ -1922,7 +1922,7 @@ export function registerTools(
 
   tool(
     "update_app_endpoint",
-    "Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
+    "Change an existing endpoint, most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
     {
       appId: z
         .string()
@@ -1947,7 +1947,7 @@ export function registerTools(
               .string()
               .optional()
               .describe(
-                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status.",
+                "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId, a business status column becomes repairStatus or orderStatus, not status.",
               ),
             readOnly: z
               .boolean()
@@ -1983,7 +1983,7 @@ export function registerTools(
 
   tool(
     "create_app_api_key",
-    "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
+    "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes), never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
     {
       appId: z
         .string()
@@ -2021,7 +2021,7 @@ export function registerTools(
   // The model designs; this executes. Ten tool calls became one because every
   // one of them was a place for the user to see plumbing: organization ids,
   // reserved aliases, column ids, and ten verbose results (an external review
-  // of the ChatGPT connector scored exactly those). Deterministic — no model
+  // of the ChatGPT connector scored exactly those). Deterministic, no model
   // in here, the caller already is one.
   const RESERVED_ALIASES = new Set([
     "id",
@@ -2071,7 +2071,7 @@ export function registerTools(
 
   tool(
     "build_backend",
-    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind "data": only the columns you define, no task fields); set kind "tasks" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.',
+    'Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system ("a backend for my repair shop: customers, orders, payments") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design, pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type "relation", relatedBoard: "<board name in this spec>", relationType: many_to_one for an order→customer link), and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind "data": only the columns you define, no task fields); set kind "tasks" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.',
     {
       project: z
         .object({
@@ -2096,7 +2096,7 @@ export function registerTools(
               .enum(["tasks", "data"])
               .optional()
               .describe(
-                '"data" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. "tasks": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do.',
+                '"data" (default here): a plain table with only the columns you define, right for customers, products, orders, payments. "tasks": also the built-in task columns (status, priority, assignee, due date, tags), only for boards where people track work to do.',
               ),
             columns: z
               .array(
@@ -2142,7 +2142,7 @@ export function registerTools(
                     ])
                     .optional()
                     .describe(
-                      "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it.",
+                      "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means, say it.",
                     ),
                   settings: z
                     .record(z.any())
@@ -2320,7 +2320,7 @@ export function registerTools(
                 problems.push(
                   `${b.name} row "${String(row.title ?? "")}": relation "${col.name}" names "${want}", but no row with that title is in the spec for ${targetName}` +
                     (blank
-                      ? `. ${blank} row(s) of ${targetName} have no title and no text value, so nothing can reference them — give each row a title.`
+                      ? `. ${blank} row(s) of ${targetName} have no title and no text value, so nothing can reference them, give each row a title.`
                       : ""),
                 );
               }
@@ -2693,7 +2693,7 @@ export function registerTools(
           // Cleanup itself failed: say so rather than pretend.
         }
         const tail = undone.includes("project")
-          ? " Nothing was left behind — the project and everything in it were removed."
+          ? " Nothing was left behind, the project and everything in it were removed."
           : ` The project "${project.name}" (${created.id}) could not be removed automatically; delete it at ${client.appUrl(`/projects/${created.id}`)}.`;
         throw new Error(
           `build_backend stopped: ${message}.${tail} Fix the spec and call again.`,
@@ -2704,7 +2704,7 @@ export function registerTools(
 
   tool(
     "create_automation",
-    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
+    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns, pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
     {
       projectId: z
         .string()
@@ -2761,7 +2761,7 @@ export function registerTools(
     }) => {
       // http_request maps response paths onto real column ids. A model that
       // guessed a name instead would create an automation that runs, succeeds,
-      // and writes nothing — so say it plainly rather than let it fail quietly.
+      // and writes nothing, so say it plainly rather than let it fail quietly.
       for (const action of actions) {
         if (action.type !== "http_request") continue;
         const mapping = (action.config as { responseMapping?: unknown })
@@ -2817,7 +2817,7 @@ export function registerTools(
 
   tool(
     "list_apps",
-    "List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
+    "List the apps in the organization, id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
     {
       organizationId: z
         .string()
@@ -2834,7 +2834,7 @@ export function registerTools(
 
   tool(
     "get_app_spec",
-    "Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.",
+    "Get the machine-readable spec of an app (base URL, endpoints, methods, fields), use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute, use it verbatim, do not rebuild it from the admin URL.",
     {
       appId: z
         .string()
@@ -2859,7 +2859,7 @@ export function registerTools(
 
   tool(
     "get_frontend_prompt",
-    "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.",
+    "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx), use list_apps to find it.",
     {
       appId: z
         .string()
@@ -2885,7 +2885,7 @@ export function registerTools(
     },
   );
 
-  // ── Search & fetch — the two tools ChatGPT connectors and deep research require ──
+  // ── Search & fetch, the two tools ChatGPT connectors and deep research require ──
 
   type SearchHit = {
     id: string;
@@ -2940,7 +2940,7 @@ export function registerTools(
 
   tool(
     "search",
-    "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
+    "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] }, the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
     {
       query: z.string().min(1).max(100).describe("Search text"),
       projectId: z
@@ -2989,7 +2989,7 @@ export function registerTools(
 
   tool(
     "fetch",
-    "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.",
+    "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata }, the ChatGPT fetch contract; text is the record as JSON.",
     {
       id: z
         .string()
@@ -3120,18 +3120,18 @@ export function registerTools(
   const checkBundleSize = (n: number) => {
     if (n > MAX_BUNDLE) {
       throw new Error(
-        `Bundle is ${Math.round(n / 1024 / 1024)}MB zipped — the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`,
+        `Bundle is ${Math.round(n / 1024 / 1024)}MB zipped, the limit is 50MB. Static frontends should not embed large media; upload those as attachments instead.`,
       );
     }
   };
 
   tool(
     "deploy_frontend",
-    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.",
+    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
     {
       appId: z
         .string()
-        .describe("App UUID or slug (app-xxxxxx) — see list_apps"),
+        .describe("App UUID or slug (app-xxxxxx), see list_apps"),
       files: z
         .array(
           z.object({
@@ -3154,7 +3154,7 @@ export function registerTools(
         .max(500)
         .optional()
         .describe(
-          "The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation",
+          "The site files inline. Must include index.html. Up to 500 files / 8MB decoded, right for a frontend written in the conversation",
         ),
       zipUrl: z
         .string()
@@ -3288,7 +3288,7 @@ export function registerTools(
           );
           throw new Error(
             candidate
-              ? `No index.html in ${abs} — did you mean ${joinPath(abs, candidate)}?`
+              ? `No index.html in ${abs}, did you mean ${joinPath(abs, candidate)}?`
               : `No index.html in ${abs}. Pass the build OUTPUT directory, and build first if you haven't.`,
           );
         }
@@ -3305,7 +3305,7 @@ export function registerTools(
         buffer,
       );
       // The server's `published` means "this deploy is the one that published
-      // the app" — false whenever it was already published. Next to "Live
+      // the app", false whenever it was already published. Next to "Live
       // now" that read as a contradiction, so say what actually happened.
       const { published: publishedByThisDeploy, ...rest } = result;
       return ok({
@@ -3318,7 +3318,7 @@ export function registerTools(
 
   tool(
     "list_deployments",
-    "List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.",
+    "List the hosted-frontend deployments of an app, versions, which one is live, and the public URL.",
     {
       appId: z
         .string()

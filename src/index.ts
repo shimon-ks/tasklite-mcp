@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TaskLite MCP — stdio entry (Claude Code local install).
+ * TaskLite MCP, stdio entry (Claude Code local install).
  * Single-user: credential from env TASKLITE_API_KEY or ~/.tasklite/credentials.json;
  * the sign_up tool can create both from the conversation.
  */

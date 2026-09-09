@@ -3,13 +3,13 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
-## 0.14.0 — 2026-09-07
+## 0.14.0, 2026-09-07
 
 Every tool now declares all three annotation hints explicitly.
 
 A missing hint is not the same as a false one. Until now 48 tools said
 nothing at all about `openWorldHint`, and every read-only tool said nothing
-about `destructiveHint` — so a client, or a directory reviewer, could not
+about `destructiveHint`, so a client, or a directory reviewer, could not
 tell "this tool does not reach the open internet" from "nobody said". The
 OpenAI Apps scan flags exactly that on every tool.
 
@@ -21,7 +21,7 @@ OpenAI Apps scan flags exactly that on every tool.
   names, and a push delivered through Google. Everything else touches only
   data inside their own organization.
 
-## 0.13.0 — 2026-09-07
+## 0.13.0, 2026-09-07
 
 Push notifications reached the API, so the tools can see and test them.
 
@@ -33,14 +33,14 @@ as a `send_push` automation action.
 ### Added
 - `push_status`. Whether an app can notify phones, whose Firebase project it
   sends through, and how many devices have registered. When nothing is set
-  up it says how to set it up — and says plainly that the service account is
+  up it says how to set it up, and says plainly that the service account is
   a private key which must not be pasted into a chat.
 - `send_test_push`. One real notification to named app users, so the chain
   can be proven before an automation depends on it. The answer separates
   "delivered", "this user has no device yet" and "the service says this
   device is gone", because those are three different problems.
 
-## 0.12.0 — 2026-09-07
+## 0.12.0, 2026-09-07
 
 `query_items` could only page. Anyone who wanted a subset had to pull the
 whole board and filter on their side, which is slow, expensive, and reads
@@ -58,11 +58,11 @@ do more; the tool simply never exposed it.
 
 ### Changed
 - `query_items` says in its description that a published app's own REST
-  endpoints take a fuller grammar — nine filter operators per column,
-  relation filters, per-field search — and points at `get_app_spec` for it.
+  endpoints take a fuller grammar, nine filter operators per column,
+  relation filters, per-field search, and points at `get_app_spec` for it.
   The tool is the admin view of a board, not the app's query language.
 
-## 0.11.0 — 2026-09-07
+## 0.11.0, 2026-09-07
 
 From a reviewer's API-quality report.
 
@@ -80,7 +80,7 @@ From a reviewer's API-quality report.
   problem in the board that pointed at it. The description now matches what
   the code does.
 
-## 0.10.1 — 2026-09-07
+## 0.10.1, 2026-09-07
 
 ### Fixed
 - `build_backend` no longer leaves a half-built project behind. When the
@@ -88,7 +88,7 @@ From a reviewer's API-quality report.
   anything, and if any later step fails it removes the project and the app
   it made instead of naming them in an error.
 
-## 0.10.0 — 2026-09-06
+## 0.10.0, 2026-09-06
 
 ### Added
 - `deploy_frontend` takes the site in one of three ways instead of only a
@@ -100,14 +100,14 @@ From a reviewer's API-quality report.
   of the three is required. Private hosts, plain http and non-zip answers
   are refused before anything is uploaded.
 
-## 0.9.0 — 2026-09-06
+## 0.9.0, 2026-09-06
 
 Requires a TaskLite server from 2026-09-06 for the new behaviour; older
 servers ignore `kind` and keep creating task boards.
 
 ### Added
 - Data boards. `create_board` takes `kind`: `"tasks"` (default) also gives
-  the board the built-in task columns — status, priority, assignee, due
+  the board the built-in task columns, status, priority, assignee, due
   date, tags; `"data"` creates a plain table with only the columns you add.
   `build_backend` boards default to `"data"`: a backend's tables are
   customers, orders and payments, not to-dos. Rows of a data board come
@@ -117,19 +117,19 @@ servers ignore `kind` and keep creating task boards.
   `relatedItems: [{ id, title }]` next to `relatedItemIds`, whoever wrote
   the row, so a frontend shows "Sam Miller" without a second request.
 
-## 0.8.3 — 2026-09-06
+## 0.8.3, 2026-09-06
 
 ### Changed
 - `build_backend` no longer cares about the order of boards in the spec.
-  Sample rows are created in dependency order — a board's rows after the
-  rows of every board it links to — so an order that names a customer
+  Sample rows are created in dependency order, a board's rows after the
+  rows of every board it links to, so an order that names a customer
   works whether Customers is listed first or last.
 - A sample row that links to a title not present in the related board's
   rows is refused before anything is created, with the board and the
   missing title named. Previously the project was built and the gap was
   only mentioned in a note.
 
-## 0.8.2 — 2026-09-06
+## 0.8.2, 2026-09-06
 
 ### Changed
 - `build_backend` relation columns take `relatedBoard` and `relationType`
@@ -141,7 +141,7 @@ servers ignore `kind` and keep creating task boards.
   the relation type of every relation column. Using either field on a
   non-relation column is refused before anything is built.
 
-## 0.8.1 — 2026-09-06
+## 0.8.1, 2026-09-06
 
 ### Added
 - `build_backend` links boards: a `relation` column with
@@ -156,10 +156,10 @@ servers ignore `kind` and keep creating task boards.
 - A relation to a board not in the spec is refused before anything is
   created, with the list of boards that are.
 
-## 0.8.0 — 2026-09-06
+## 0.8.0, 2026-09-06
 
 ### Added
-- `build_backend` — one call builds a project, its boards, typed columns,
+- `build_backend`, one call builds a project, its boards, typed columns,
   optional sample rows, and optionally a published REST API with an endpoint
   per board and a server-side key. The model designs the schema; the tool
   executes it and returns one compact summary. API field names are derived
@@ -180,7 +180,7 @@ servers ignore `kind` and keep creating task boards.
   names (`status`, `title`, …) so a model never trips on them.
 - Tool count 44 → 45; hosted 39 → 40.
 
-## 0.7.1 — 2026-09-06
+## 0.7.1, 2026-09-06
 
 ### Changed
 - Every tool parameter now carries a description (155 parameters across 44 tools), so clients and directories show what each argument means.
@@ -188,19 +188,19 @@ servers ignore `kind` and keep creating task boards.
 ### Fixed
 - Hosted server: `resources/list` and `prompts/list` join the discovery methods that work without a credential (directory scanners logged them as failures).
 
-## 0.7.0 — 2026-09-04
+## 0.7.0, 2026-09-04
 
 Requires TaskLite API from 2026-09-04 (branch `feat/app-api-hardening`) for
 the new behaviour; older servers ignore the new fields.
 
 ### Added
-- `search` and `fetch` — the two tools ChatGPT connectors and deep research
+- `search` and `fetch`, the two tools ChatGPT connectors and deep research
   require. `search` covers projects, boards and items; `fetch` returns one of
   them by the id `search` gave (or an app URL path).
 - Schema editing: `update_column` (rename, retype, options, required, hidden),
   `delete_column`, `reorder_columns`, `update_board`, `delete_board`.
   A type change converts stored values and reports `{ converted, cleared }`.
-- `export_project` — the whole project as JSON (boards, columns, items,
+- `export_project`, the whole project as JSON (boards, columns, items,
   cells), capped per board for the model; the REST endpoint returns everything.
 - Column validation rules through `settings.validation` on `create_column` /
   `update_column`: `unique`, `min`, `max`, `minLength`, `maxLength`,
@@ -223,6 +223,6 @@ the new behaviour; older servers ignore the new fields.
 ### Changed
 - Tool count 31 → 44. Hosted server exposes 39 (no onboarding tools).
 
-## 0.5.7 — 2026-08
+## 0.5.7, 2026-08
 
 Last version published before this changelog existed.

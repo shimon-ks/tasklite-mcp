@@ -4,7 +4,7 @@
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-net.tasklite%2Fmcp-blue)](https://registry.modelcontextprotocol.io)
 [![license](https://img.shields.io/npm/l/@tasklite/mcp)](./LICENSE)
 
-**A backend and an admin for apps built by AI agents — [tasklite.net](https://tasklite.net) · [docs](https://tasklite.net/docs)**
+**A backend and an admin for apps built by AI agents.** [tasklite.net](https://tasklite.net) · [docs](https://tasklite.net/docs)
 
 Describe a system and get the thing behind it: a project with typed tables and
 relations, rows, REST endpoints, an API key, and an admin interface the
@@ -13,7 +13,7 @@ Gemini, Cursor or VS Code. Deploy a frontend onto it and hand the whole thing
 over.
 
 > **Not the CLI task manager.** There is an older, unrelated project also called
-> TaskLite — [ad-si/TaskLite](https://github.com/ad-si/TaskLite) at
+> TaskLite, [ad-si/TaskLite](https://github.com/ad-si/TaskLite) at
 > [tasklite.org](https://tasklite.org), a command-line task manager. This is a
 > different product from a different author: a hosted backend at
 > **tasklite.net**, published as `@tasklite/mcp` and as `net.tasklite/mcp` in
@@ -36,7 +36,7 @@ client can tell what is safe to run unattended.
 
 `build_backend` is the one to reach for first: it takes a description of a
 system and creates the project, the boards, their typed columns including the
-relations between them, sample rows, and a published REST API with a key — in
+relations between them, sample rows, and a published REST API with a key, in
 one call, instead of a dozen.
 
 ## Setup
@@ -85,11 +85,11 @@ Optional env: `TASKLITE_API_URL` (default `https://api.tasklite.net`), `TASKLITE
 
 One hosted server, every MCP client. Full setup notes: https://tasklite.net/docs/guides/connector-from-cursor-codex-desktop
 
-- **Cursor** — [Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=tasklite&config=eyJ1cmwiOiAiaHR0cHM6Ly9tY3AudGFza2xpdGUubmV0L21jcCJ9) or put `{"mcpServers":{"tasklite":{"url":"https://mcp.tasklite.net/mcp"}}}` in `.cursor/mcp.json`.
-- **VS Code** — [Install in VS Code](vscode:mcp/install?%7B%22name%22%3A%20%22tasklite%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//mcp.tasklite.net/mcp%22%7D) or `.vscode/mcp.json` with `{"servers":{"tasklite":{"type":"http","url":"https://mcp.tasklite.net/mcp"}}}`.
-- **ChatGPT** — Settings → Connectors (developer mode) → add `https://mcp.tasklite.net/mcp`. The server implements `search` and `fetch`.
-- **Gemini CLI** — `gemini extensions install https://github.com/shimon-ks/tasklite-mcp` (this repo ships `gemini-extension.json`), or add `httpUrl` + `oauth` to `~/.gemini/settings.json`.
-- **OpenAI Responses API / Agents SDK, Gemini API** — pass the hosted URL with `Authorization: Bearer tl_…`.
+- **Cursor**: [Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=tasklite&config=eyJ1cmwiOiAiaHR0cHM6Ly9tY3AudGFza2xpdGUubmV0L21jcCJ9) or put `{"mcpServers":{"tasklite":{"url":"https://mcp.tasklite.net/mcp"}}}` in `.cursor/mcp.json`.
+- **VS Code**: [Install in VS Code](vscode:mcp/install?%7B%22name%22%3A%20%22tasklite%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//mcp.tasklite.net/mcp%22%7D) or `.vscode/mcp.json` with `{"servers":{"tasklite":{"type":"http","url":"https://mcp.tasklite.net/mcp"}}}`.
+- **ChatGPT**: Settings → Connectors (developer mode) → add `https://mcp.tasklite.net/mcp`. The server implements `search` and `fetch`.
+- **Gemini CLI**: `gemini extensions install https://github.com/shimon-ks/tasklite-mcp` (this repo ships `gemini-extension.json`), or add `httpUrl` + `oauth` to `~/.gemini/settings.json`.
+- **OpenAI Responses API / Agents SDK, Gemini API**: pass the hosted URL with `Authorization: Bearer tl_…`.
 
 ## Typical flow (what Claude Code does)
 
