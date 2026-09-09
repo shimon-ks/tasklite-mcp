@@ -1,6 +1,6 @@
 {
   "name": "@tasklite/mcp",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "TaskLite MCP server: build a full backend (projects, boards, data, REST endpoints), deploy a frontend onto it, and get a ready-made admin, from Claude Code and other MCP clients",
   "license": "MIT",
   "homepage": "https://tasklite.net",
@@ -32,8 +32,7 @@
   ],
   "type": "module",
   "bin": {
-    "tasklite-mcp": "dist/index.js",
-    "tasklite-mcp-http": "dist/http.js"
+    "tasklite-mcp": "dist/index.js"
   },
   "main": "dist/index.js",
   "scripts": {

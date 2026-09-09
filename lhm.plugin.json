@@ -1,0 +1,2082 @@
+{
+  "author": "shimon-ks",
+  "authorUrl": "https://tasklite.net",
+  "cloudEndpoint": "https://mcp.tasklite.net/mcp",
+  "description": "TaskLite (tasklite.net): a hosted backend that comes with the admin a business runs itself. One build_backend call creates a project, typed boards with relations, rows, REST endpoints and a key. Unrelated to the TaskLite command-line task manager at tasklite.org.",
+  "homepage": "https://tasklite.net",
+  "identifier": "tasklite",
+  "name": "TaskLite",
+  "prompts": [],
+  "resources": [],
+  "tags": [
+    "mcp",
+    "backend-as-a-service",
+    "database",
+    "rest-api",
+    "admin-panel",
+    "no-code",
+    "claude",
+    "chatgpt"
+  ],
+  "tools": [
+    {
+      "name": "list_organizations",
+      "description": "List the organizations the authenticated user belongs to. Use the returned id as organizationId in other tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List organizations",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "configure_external_access",
+      "description": "Read or change how EXTERNAL users (people who sign up to your app through TaskLite auth: POST /auth/register-external with this organizationId, then POST /auth/login) get into an organization. registrationPolicy: \"open\" — in at once; \"approval\" — an organization admin approves each signup (TaskLite mails the admins on every signup, and the person once approved; unapproved users are never billed); \"closed\" — invite only, self-signup refused. appLoginUrl: the page of YOUR app where these users log in — it becomes the \"Log in\" button in the approval email, so set it whenever you deploy an app that uses this flow; pass \"\" to clear. Call with no changes to just read the current settings. Requires organization admin.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "description": "Defaults to the credential organization"
+          },
+          "registrationPolicy": {
+            "type": "string",
+            "enum": [
+              "closed",
+              "approval",
+              "open"
+            ],
+            "description": "How external sign-ups are admitted: open, approval or closed"
+          },
+          "appLoginUrl": {
+            "type": "string",
+            "description": "https URL of your app's login page for external users; \"\" clears it"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Configure external user access",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_projects",
+      "description": "List projects in an organization. The API returns 50 per page — an organization with more than that needs page 2 and beyond, so check the returned total before assuming a project does not exist.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "description": "Defaults to the credential organization"
+          },
+          "page": {
+            "type": "number",
+            "description": "1-based; defaults to 1"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Defaults to 50"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List projects",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_boards",
+      "description": "List the boards inside a project — id, name, description. Every other board tool needs a boardId, and this is the only way to discover one without being handed a URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "page": {
+            "type": "number",
+            "description": "1-based; defaults to 1"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Defaults to 50"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List boards",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_project",
+      "description": "Create a project (a business process container). Boards with data live inside projects.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create project",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_board",
+      "description": "Create a board (a data table) inside a project. Add typed columns with create_column afterwards. kind: \"tasks\" (default) also gives the board the built-in task columns — status, priority, assignee, due date, tags — for work people track; \"data\" creates a plain table with only the columns you add, for records such as customers, products or orders (requires a TaskLite server from 2026-09-06; older servers ignore kind).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tasks",
+              "data"
+            ],
+            "description": "\"tasks\": with the built-in task columns (status, priority, assignee, due date, tags). \"data\": only the columns you add. Default tasks."
+          }
+        },
+        "required": [
+          "projectId",
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create board",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_column",
+      "description": "Add a typed column to a board. Valid types: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, formula, rating, currency, file. Choose by meaning — date for dates, phone for phones, number/currency for amounts, dropdown/status (with settings.options as an array of labels) for closed choices; text is for free text only. An obvious name/type mismatch is rejected with the suggested type; pass force:true to override. Rules go in settings.validation: { unique, min, max, minLength, maxLength, pattern, patternMessage } — enforced on every write (UI, MCP, App API). Closed choices (dropdown/status) reject values outside settings.options unless settings.allowCustom is true.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "type": {
+            "type": "string",
+            "description": "Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file"
+          },
+          "settings": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Type-specific settings. For dropdown/status/priority: options, either as labels [\"A\",\"B\"] or as full objects [{value,label,color}] — labels are expanded server-side, and colors are assigned if you do not supply them."
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Require a non-blank value on every App API create"
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Create the column even when the name suggests a different type"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "name",
+          "type"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Add column",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_board_schema",
+      "description": "Get a board with its full column schema (ids, names, types, settings). Call this before creating items with cells.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Read board schema",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_board",
+      "description": "Rename a board or change its description. Structure (columns) is changed with update_column / delete_column / reorder_columns.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Update board",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_board",
+      "description": "Delete a board with every item on it. Destructive and not undoable — confirm with the user first, and prefer delete_column when only part of the model is wrong.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Delete board",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_project",
+      "description": "Delete a project with every board, column and row inside it. Destructive: confirm with the user first, and name the project in the confirmation. The project goes to the organization recycle bin, so it can be restored from the admin until it is emptied.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Delete project",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_column",
+      "description": "Change a column after the fact: rename it, change its type (e.g. number -> currency), replace settings (dropdown options), or set isRequired / isHidden. A type change converts existing values (number↔currency, text→number/date/checkbox, anything→text) and clears the ones that cannot convert; the response carries conversion: { converted, cleared }. settings.validation rules apply here too.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "Column id (from get_board_schema)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "type": {
+            "type": "string",
+            "description": "New column type (same list as create_column)"
+          },
+          "settings": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Replaces the column settings, e.g. { options: [...] } for dropdown/status"
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Require a non-blank value on every App API create"
+          },
+          "isHidden": {
+            "type": "boolean",
+            "description": "Hide the column in the TaskLite UI"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Skip the name/type sanity check"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "columnId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Update column",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_column",
+      "description": "Delete a column and every value stored in it. Destructive — confirm with the user first. Use update_column when the column is right but its name, type or options are wrong.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "Column id (from get_board_schema)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "columnId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Delete column",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "reorder_columns",
+      "description": "Set the display order of a board's columns. Pass every column id in the wanted order (get_board_schema lists them).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "columnIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Column ids in the new order (every column of the board)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "columnIds"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Reorder columns",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "export_project",
+      "description": "The whole project as JSON — boards, columns with settings, items with their cells keyed by column id. For migrations, backups and reading a system back. Items are capped per board for the model's sake; the REST endpoint GET /organizations/{orgId}/projects/{projectId}/export.json returns everything.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Defaults to the credential organization"
+          },
+          "maxItemsPerBoard": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2000,
+            "description": "Default 200"
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Export project as JSON",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "query_items",
+      "description": "List items (rows) of a board, including their cell values. Returns all items unless limit/page are given (the API defaults to 50 per page when unpaged, so the tool pages through and concatenates). Narrow the result with search, status, priority and sort instead of fetching everything. This is the admin view; the REST endpoints of a published app take a fuller grammar — filter[column][gte], relation filters, per-field search — see get_app_spec.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "search": {
+            "type": "string",
+            "description": "Free text; matches the row title and its text cells"
+          },
+          "status": {
+            "type": "string",
+            "description": "Only rows with one of these statuses, comma separated: \"todo,in_progress\" (task boards only)"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Only rows with one of these priorities, comma separated (task boards only)"
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sort by title, createdAt, updatedAt or status; prefix with \"-\" for descending, e.g. \"-createdAt\". Anything else keeps the board order"
+          },
+          "archived": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived",
+              "all"
+            ],
+            "description": "Which rows to include. Default active"
+          },
+          "limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 500,
+            "description": "Page size; omit to fetch all items"
+          },
+          "page": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "1-based page, only with limit"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List items",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_item",
+      "description": "Create an item (row) with all of its data in one call. cells maps columnId -> value (use get_board_schema for column ids); every cell is saved with the row. Use set_cell only for later edits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Item title, shown as the row name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status value (todo, in_progress, done, or a value from the board's status options)"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority: low, medium, high or urgent"
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "ISO date"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags as an array of strings"
+          },
+          "cells": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Cell values keyed by column id: { \"<columnId>\": value }. Scalars, { amount, currency } for currency, { relatedItemIds: [...] } for relations"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "title"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create item",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_item",
+      "description": "Update item fields (title, description, status, priority, dueDate, tags).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item (row) id"
+          },
+          "title": {
+            "type": "string",
+            "description": "Item title, shown as the row name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Free-text description"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status value (todo, in_progress, done, or a value from the board's status options)"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority: low, medium, high or urgent"
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "Due date, ISO 8601 (YYYY-MM-DD or full timestamp)"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags as an array of strings"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "itemId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Update item",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "set_cell",
+      "description": "Set a single cell value on an item by columnId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item (row) id"
+          },
+          "columnId": {
+            "type": "string",
+            "description": "Column id (from get_board_schema)"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {}
+              },
+              {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            ],
+            "description": "The new cell value; shape depends on the column type"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "itemId",
+          "columnId",
+          "value"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Set cell value",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_item",
+      "description": "Delete an item. Destructive — confirm with the user before calling.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item id (from query_items / create_item)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "itemId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Delete item",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_comments",
+      "description": "List the comments (the correspondence thread) on an item, oldest first. Each comment includes its author and any @mentions. Needs projectId and itemId (get itemId from query_items).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item (row) id"
+          },
+          "page": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "1-based page, default 1"
+          },
+          "limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "description": "Page size, default 20"
+          }
+        },
+        "required": [
+          "projectId",
+          "itemId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List item comments",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "add_comment",
+      "description": "Post a comment on an item's thread. To notify people, pass their user ids in mentionedUserIds (each also appears as an @mention). attachmentIds references already-uploaded files. Needs projectId and itemId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item (row) id"
+          },
+          "content": {
+            "type": "string",
+            "description": "The comment text"
+          },
+          "mentionedUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "User ids to @mention and notify"
+          },
+          "attachmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of already-uploaded attachments to link"
+          }
+        },
+        "required": [
+          "projectId",
+          "itemId",
+          "content"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Add a comment to an item",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_comment",
+      "description": "Edit the text of an existing comment. Only the author can edit their comment. Needs projectId, itemId and the commentId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item (row) id"
+          },
+          "commentId": {
+            "type": "string",
+            "description": "Comment id (from list_comments)"
+          },
+          "content": {
+            "type": "string",
+            "description": "The new comment text"
+          }
+        },
+        "required": [
+          "projectId",
+          "itemId",
+          "commentId",
+          "content"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Edit a comment",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "delete_comment",
+      "description": "Delete a comment from an item thread. Destructive — confirm with the user before calling. Needs projectId, itemId and the commentId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "itemId": {
+            "type": "string",
+            "description": "Item id (from query_items / create_item)"
+          },
+          "commentId": {
+            "type": "string",
+            "description": "Comment id (from list_comments / add_comment)"
+          }
+        },
+        "required": [
+          "projectId",
+          "itemId",
+          "commentId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Delete a comment",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_app",
+      "description": "Create an app — a named API surface over the boards of a project, for an external frontend. Then add endpoints and an API key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "name",
+          "projectId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create app",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "push_status",
+      "description": "Whether an app can send push notifications to phones, and how many devices are registered. Push goes out through the customer's OWN Firebase project, so it has to be configured once per app before send_push automations do anything. This tool never returns the key.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Push status",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "send_test_push",
+      "description": "Send one real push notification to the given app users, to prove the chain works before an automation depends on it. Confirm with the user first: this reaches actual phones.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "userIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "App user ids to notify (the same ids row-level security uses)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Notification title; defaults to \"TaskLite\""
+          },
+          "body": {
+            "type": "string",
+            "description": "Notification body"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId",
+          "userIds"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Send a test push",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "publish_app",
+      "description": "Publish an app — required before its API endpoints accept external calls.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Publish app",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_app_endpoint",
+      "description": "Expose a board as a REST endpoint of an app: /apps/{appSlug}/api/{slug}. exposedColumns limits which columns are readable/writable. rowLevelSecurity.enabled makes the endpoint per-user: the developer's server sends `X-App-User: <their user id>` next to the API key, and the endpoint returns, updates and deletes ONLY that user's rows (401 without the header). Use it whenever the app has its own users.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL slug: lowercase letters, digits and dashes"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "allowedMethods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "description": "HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE"
+          },
+          "exposedColumns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "columnId": {
+                  "type": "string",
+                  "description": "Column id (from get_board_schema)"
+                },
+                "alias": {
+                  "type": "string",
+                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status."
+                },
+                "readOnly": {
+                  "type": "boolean",
+                  "description": "Expose the column for reading only; writes to it are refused with 400"
+                }
+              },
+              "required": [
+                "columnId"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata"
+          },
+          "rowLevelSecurity": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Scope every request to the calling app user (X-App-User header)"
+              },
+              "filterByUserId": {
+                "type": "boolean",
+                "description": "Also filter reads to rows the user created"
+              }
+            },
+            "required": [
+              "enabled"
+            ],
+            "additionalProperties": false,
+            "description": "Row-level security: when enabled, each app user sees and edits only their own rows"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId",
+          "boardId",
+          "slug",
+          "name"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create app endpoint",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_app_endpoints",
+      "description": "List an app's REST endpoints — slug, board, allowed methods, and how many columns each exposes. An endpoint exposing 0 columns is broken: it returns only item metadata and silently discards writes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List app endpoints",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "update_app_endpoint",
+      "description": "Change an existing endpoint — most often to set exposedColumns on one that was created without them. Get the endpoint id from list_app_endpoints and the column ids from get_board_schema.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "endpointId": {
+            "type": "string",
+            "description": "Endpoint id (from list_app_endpoints)"
+          },
+          "slug": {
+            "type": "string",
+            "description": "URL slug: lowercase letters, digits and dashes"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "allowedMethods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PATCH",
+                "DELETE"
+              ]
+            },
+            "description": "HTTP methods the endpoint accepts: GET, POST, PATCH, DELETE"
+          },
+          "exposedColumns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "columnId": {
+                  "type": "string",
+                  "description": "Column id (from get_board_schema)"
+                },
+                "alias": {
+                  "type": "string",
+                  "description": "JSON key exposed for this column: letters, digits, underscore. Never one of the reserved item fields id, title, description, status, priority, dueDate, assignedTo, createdAt, updatedAt, order, appUserId — a business status column becomes repairStatus or orderStatus, not status."
+                },
+                "readOnly": {
+                  "type": "boolean",
+                  "description": "Expose the column for reading only; writes to it are refused with 400"
+                }
+              },
+              "required": [
+                "columnId"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Replacement list of exposed columns (same shape as create_app_endpoint)"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether it is active"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId",
+          "endpointId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Update app endpoint",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_app_api_key",
+      "description": "Create an API key for an app. SECURITY: the key must live server-side only (env var, Next.js API routes) — never in browser code. If the app has its own users, the server also sends `X-App-User: <user id>` with the key so per-user endpoints know who is acting.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "description": "Permissions recorded on the key: [\"read\"] or [\"read\",\"write\"]. Omit to match the app: write when any endpoint accepts POST, PATCH or DELETE."
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create app API key",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "build_backend",
+      "description": "Build a whole backend in one call from a spec you compose: the project, its boards, their typed columns (including relations between the boards), optional sample rows, and optionally a published REST API with one endpoint per board and a server-side key. Use it whenever the user describes a system (\"a backend for my repair shop: customers, orders, payments\") instead of calling create_project, create_board, create_column, create_app, publish_app, create_app_endpoint and create_app_api_key one by one. You do the design — pick column types by meaning (phone, date, currency, dropdown/status with options for closed choices), link boards with a relation column (type \"relation\", relatedBoard: \"<board name in this spec>\", relationType: many_to_one for an order→customer link) — and this tool executes it and returns one compact summary. API field names are derived from column names and never collide with reserved item fields, so there is nothing to retry. Boards are created as plain data tables (kind \"data\": only the columns you define, no task fields); set kind \"tasks\" on a board where people track work to do and want status, priority, assignee and due date built in. Every row still has a title.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Project name, e.g. \"Bike Repair Shop\""
+              },
+              "description": {
+                "type": "string",
+                "description": "One line on what the system is for"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "description": "The project that holds the boards"
+          },
+          "boards": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Board (table) name, e.g. \"Repair Orders\""
+                },
+                "description": {
+                  "type": "string",
+                  "description": "One line on what a row is"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "tasks",
+                    "data"
+                  ],
+                  "description": "\"data\" (default here): a plain table with only the columns you define — right for customers, products, orders, payments. \"tasks\": also the built-in task columns (status, priority, assignee, due date, tags) — only for boards where people track work to do."
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Column name as the user would say it, e.g. \"Customer\", \"Phone\", \"Repair Status\""
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "text, rich_text, number, currency, date, datetime, phone, email, link, checkbox, dropdown, status, priority, rating, file, people, relation, label, duration"
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The closed choices for dropdown/status/priority, e.g. [\"Received\",\"In Repair\",\"Ready\",\"Completed\"]"
+                      },
+                      "required": {
+                        "type": "boolean",
+                        "description": "Reject API creates that leave it blank"
+                      },
+                      "validation": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "{ unique, min, max, minLength, maxLength, pattern, patternMessage }"
+                      },
+                      "relatedBoard": {
+                        "type": "string",
+                        "description": "relation columns only: the name of another board in this spec that this column links to, e.g. \"Customers\""
+                      },
+                      "relationType": {
+                        "type": "string",
+                        "enum": [
+                          "many_to_one",
+                          "one_to_many",
+                          "many_to_many",
+                          "one_to_one"
+                        ],
+                        "description": "relation columns only. many_to_one: many rows here point at one row there (an order has one customer; a payment has one order). one_to_many: one row here owns many there. many_to_many: both sides several (a job has several tags). one_to_one: exactly one each way. Defaults to many_to_many, which is rarely what a business model means — say it."
+                      },
+                      "settings": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "Other type settings, e.g. { currency: \"ILS\" }. (relatedBoardName / relationType are also accepted here for compatibility.)"
+                      },
+                      "alias": {
+                        "type": "string",
+                        "description": "API field name to use instead of the derived one (letters, digits, underscore; not a reserved item field)"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "description": "Typed columns of the board"
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "description": "Optional sample rows keyed by column name, e.g. [{ \"Customer\": \"Sam Miller\", \"Phone\": \"052-555-0142\", \"Price\": 80 }]. \"title\" sets the row title; without it the first plain text value is used, and failing that the row is named after its board and position. A row that other boards reference must carry a title (or a text value) so the reference can be resolved. A relation cell takes the title(s) of rows in the related board (any order in the spec; rows are created in dependency order)."
+                }
+              },
+              "required": [
+                "name",
+                "columns"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "The boards (tables) of the backend, in any order"
+          },
+          "api": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "App name; defaults to \"<project> API\""
+              },
+              "methods": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "GET",
+                    "POST",
+                    "PATCH",
+                    "DELETE"
+                  ]
+                },
+                "description": "HTTP methods every endpoint accepts; defaults to all four"
+              },
+              "rowLevelSecurity": {
+                "type": "boolean",
+                "description": "true when the app has its own users and each may see only their rows (the caller then sends X-App-User)"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Include to publish a REST API over every board and mint a key; omit for a boards-only build"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; needed only when the account belongs to several (the error then lists them)"
+          }
+        },
+        "required": [
+          "project",
+          "boards"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Build a backend in one call",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "create_automation",
+      "description": "Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns — pair it with the \"scheduled\" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: \"delay\", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "item_created",
+              "status_changed",
+              "column_value_changed",
+              "date_approaching",
+              "scheduled"
+            ],
+            "description": "Event that starts the automation: item_created, status_changed, column_value_changed, date_approaching, or scheduled (cron)"
+          },
+          "triggerConfig": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "e.g. { cron: \"0 8 * * *\" } for scheduled, { columnName } for column_value_changed"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file"
+                },
+                "config": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "description": "Action-specific config, e.g. { url, method, headers, responseMapping } for http_request"
+                }
+              },
+              "required": [
+                "type",
+                "config"
+              ],
+              "additionalProperties": false
+            },
+            "description": "e.g. [{ type: \"http_request\", config: { url: \"https://api.frankfurter.app/latest?from=USD&to=ILS\", method: \"GET\", responseMapping: [{ path: \"rates.ILS\", columnId: \"<column id from get_board_schema>\" }] } }]"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether it is active"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId",
+          "name",
+          "trigger",
+          "actions"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Create automation",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_automations",
+      "description": "List the automations on a board, so you can see what already runs before adding another.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project id (from list_projects / create_project)"
+          },
+          "boardId": {
+            "type": "string",
+            "description": "Board id (from list_boards / create_board)"
+          }
+        },
+        "required": [
+          "projectId",
+          "boardId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List automations",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_apps",
+      "description": "List the apps in the organization — id, slug, status. Call this first when you need an app id: the slug (app-xxxxxx) is what shows up in URLs and in generated code, and this is how you map it back to the app.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List apps",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_app_spec",
+      "description": "Get the machine-readable spec of an app (base URL, endpoints, methods, fields) — use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute — use it verbatim, do not rebuild it from the admin URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Get app spec",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_frontend_prompt",
+      "description": "Get a ready-made prompt describing the app backend, for pasting into a frontend generator (v0/bolt/lovable/cursor). appId accepts the app UUID or its slug (app-xxxxxx) — use list_apps to find it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "v0",
+              "bolt",
+              "lovable",
+              "cursor",
+              "claude-code"
+            ],
+            "description": "Target tool the prompt is written for"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId",
+          "tool"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Get frontend prompt",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text search across the projects, boards and items of the organization. Returns { results: [{ id, title, url }] } — the shape ChatGPT connectors and deep research expect; pass a result id to fetch for the full record. When you already know the board, query_items is cheaper and complete.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Search text"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Limit the search to one project"
+          },
+          "limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "description": "Max results, default 20"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Search projects, boards and items",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "fetch",
+      "description": "One project, board or item in full, by the id search returned (project:<id>, board:<projectId>:<boardId>, item:<projectId>:<boardId>:<itemId>) or by an app URL path. Returns { id, title, text, url, metadata } — the ChatGPT fetch contract; text is the record as JSON.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An id from search, or an app URL path such as /projects/…/boards/…/items/…"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Only needed for project ids when the credential has no default organization; otherwise resolved automatically"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Fetch one record by id",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "deploy_frontend",
+      "description": "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files` — the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl` — a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir` — a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint} — the hosting proxy injects the app identity, so no key ships to the browser.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App UUID or slug (app-xxxxxx) — see list_apps"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path inside the site, e.g. \"index.html\", \"app.js\", \"css/style.css\""
+                },
+                "content": {
+                  "type": "string",
+                  "description": "File content. Text as-is; binary as base64 with encoding \"base64\""
+                },
+                "encoding": {
+                  "type": "string",
+                  "enum": [
+                    "utf8",
+                    "base64"
+                  ],
+                  "description": "Default utf8"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500,
+            "description": "The site files inline. Must include index.html. Up to 500 files / 8MB decoded — right for a frontend written in the conversation"
+          },
+          "zipUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public https URL of a zip of the BUILD OUTPUT (index.html at the root, or inside a single top-level folder). Up to 50MB"
+          },
+          "dir": {
+            "type": "string",
+            "description": "Local path to the BUILD OUTPUT directory (the one containing index.html), not the project root. Only where the MCP runs on the same machine as the files"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Deploy frontend to TaskLite hosting",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_deployments",
+      "description": "List the hosted-frontend deployments of an app — versions, which one is live, and the public URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "List frontend deployments",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "rollback_deployment",
+      "description": "Point the live URL back at a previous deployment version (see list_deployments for available versions).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appId": {
+            "type": "string",
+            "description": "App id or slug (from list_apps / create_app)"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "description": "Deployment version number (from list_deployments)"
+          },
+          "organizationId": {
+            "type": "string",
+            "description": "Organization id; defaults to the credential organization when omitted"
+          }
+        },
+        "required": [
+          "appId",
+          "version"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "title": "Roll back a frontend deployment",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ],
+  "version": "0.14.0",
+  "icon": "https://tasklite.net/logo-400.png"
+}
