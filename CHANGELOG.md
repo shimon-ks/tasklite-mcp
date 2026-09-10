@@ -3,6 +3,34 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.14.2, 2026-09-11
+
+Filtering by status now works on data boards, and "everything that is not
+done" is one call.
+
+A board that build_backend creates is a data board: its status lives in an
+ordinary status-type column with whatever options the builder chose
+("Received", "Completed"), not in the task field every row carries with the
+default "todo". query_items sent `status` to that task field, so on a data
+board it matched every row or none. The server now resolves `status` against
+the board's status column, whichever one that is, and accepts option labels
+as well as values, case-insensitively.
+
+### Added
+- `excludeStatus` on query_items: rows whose status is not one of the given
+  values. Rows with no status at all are kept.
+
+### Changed
+- `status` on query_items matches the board's status column on data boards
+  too, by option value or label. `sort: "status"` sorts by that column on a
+  data board.
+- Every tool now declares `idempotentHint` as well, so all four MCP hints
+  are explicit booleans on all 48 tools. Reads, deletes, updates that set a
+  value and publish are idempotent; creates, key minting, test pushes,
+  deploy_frontend and sign_up are not.
+- One bin, `tasklite-mcp`. A second bin made `npx -y @tasklite/mcp` refuse
+  to run the package at all.
+
 ## 0.14.0, 2026-09-07
 
 Every tool now declares all three annotation hints explicitly.

@@ -1304,7 +1304,13 @@ export function registerTools(
         .string()
         .optional()
         .describe(
-          'Only rows with one of these statuses, comma separated: "todo,in_progress" (task boards only)',
+          'Only rows whose status is one of these, comma separated. Matched against the board\'s status column by option value or label, case-insensitive: "todo,in_progress" on a task board, "Received,In Repair" on a data board whose status column lists those (get_board_schema shows the options)',
+        ),
+      excludeStatus: z
+        .string()
+        .optional()
+        .describe(
+          'Only rows whose status is NOT one of these, comma separated, resolved like status. The way to ask for everything that is not done: excludeStatus "done" (task board) or "Completed" (a data board with that option). Rows with no status at all are kept',
         ),
       priority: z
         .string()
@@ -1316,7 +1322,7 @@ export function registerTools(
         .string()
         .optional()
         .describe(
-          'Sort by title, createdAt, updatedAt or status; prefix with "-" for descending, e.g. "-createdAt". Anything else keeps the board order',
+          'Sort by title, createdAt, updatedAt or status; prefix with "-" for descending, e.g. "-createdAt" for newest first. Anything else keeps the board order',
         ),
       archived: z
         .enum(["active", "archived", "all"])
@@ -1341,6 +1347,7 @@ export function registerTools(
       boardId,
       search,
       status,
+      excludeStatus,
       priority,
       sort,
       archived,
@@ -1351,6 +1358,7 @@ export function registerTools(
       boardId: string;
       search?: string;
       status?: string;
+      excludeStatus?: string;
       priority?: string;
       sort?: string;
       archived?: string;
@@ -1361,6 +1369,7 @@ export function registerTools(
       const filters = new URLSearchParams();
       if (search) filters.set("search", search);
       if (status) filters.set("status", status);
+      if (excludeStatus) filters.set("excludeStatus", excludeStatus);
       if (priority) filters.set("priority", priority);
       if (archived) filters.set("archiveFilter", archived);
       if (sort) {
