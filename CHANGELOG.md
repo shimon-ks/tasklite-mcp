@@ -3,6 +3,23 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.14.3, 2026-09-13
+
+get_app_spec can return a real OpenAPI document.
+
+"Give me the OpenAPI spec of the Bike Repair API" got TaskLite's own compact
+spec shape (appName, baseUrl, authMethod, endpoints), which is what the
+frontend prompts are built from and not what a developer or another tool
+expects under that name. The server has had an OpenAPI 3.1 route for a
+while; the tool just never reached it.
+
+### Added
+- `format` on get_app_spec: "tasklite" (default, unchanged) or "openapi",
+  the OpenAPI 3.1 document with every endpoint, typed fields, the filter
+  grammar, auth and errors. The description tells the model to pass
+  "openapi" when the user asks for the OpenAPI spec or wants to hand the
+  API to a developer.
+
 ## 0.14.2, 2026-09-11
 
 Filtering by status now works on data boards, and "everything that is not

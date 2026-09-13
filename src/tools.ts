@@ -2894,11 +2894,17 @@ export function registerTools(
 
   tool(
     "get_app_spec",
-    "Get the machine-readable spec of an app (base URL, endpoints, methods, fields), use it to generate frontend API calls. appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute, use it verbatim, do not rebuild it from the admin URL.",
+    'Get the machine-readable spec of an app: base URL, endpoints, methods, fields, auth. Two formats: "tasklite" (default), the compact shape the frontend prompts are built from, and "openapi", a standard OpenAPI 3.1 document for developers and other tools. When the user asks for the OpenAPI spec, or wants to hand the API to a developer, pass format "openapi". appId accepts either the app UUID or its slug (app-xxxxxx); list_apps shows both. The returned baseUrl is absolute, use it verbatim, do not rebuild it from the admin URL.',
     {
       appId: z
         .string()
         .describe("App id or slug (from list_apps / create_app)"),
+      format: z
+        .enum(["tasklite", "openapi"])
+        .optional()
+        .describe(
+          '"tasklite" (default): compact endpoint list. "openapi": OpenAPI 3.1 document, every endpoint with typed fields, filter grammar, auth and errors',
+        ),
       organizationId: z
         .string()
         .optional()
@@ -2906,12 +2912,13 @@ export function registerTools(
           "Organization id; defaults to the credential organization when omitted",
         ),
     },
-    async ({ appId, organizationId }) => {
+    async ({ appId, format, organizationId }) => {
       const orgId = await resolveOrg(organizationId);
+      const shape = format === "openapi" ? "openapi" : "json";
       return ok(
         await getApi().request(
           "GET",
-          `/organizations/${orgId}/apps/${appId}/spec/json`,
+          `/organizations/${orgId}/apps/${appId}/spec/${shape}`,
         ),
       );
     },
