@@ -369,6 +369,31 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  request_file_upload: {
+    title: "Create a file upload link",
+    readOnlyHint: false,
+    destructiveHint: false,
+    // Each call mints another link, and with an email each call sends another.
+    idempotentHint: false,
+    // The link works without a TaskLite account, and the invitation leaves as
+    // an email, so the effect reaches outside the workspace.
+    openWorldHint: true,
+  },
+  list_uploaded_files: {
+    title: "List files on an item",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+  revoke_upload_link: {
+    title: "Revoke a file upload link",
+    readOnlyHint: false,
+    // Ends access through that link; the files already uploaded stay.
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   create_app: {
     title: "Create app",
     readOnlyHint: false,
@@ -1708,6 +1733,203 @@ export function registerTools(
           `/projects/${projectId}/items/${itemId}/comments/${commentId}`,
         ),
       ),
+  );
+
+  tool(
+    "request_file_upload",
+    'Create a link that puts files onto an item from outside TaskLite: the customer\'s photos, a signed contract, a logo, a build zip. Returns an address like https://app.tasklite.net/upload/<token> that anyone you hand it to can use with no account, no login and no API key; pass clientEmail and TaskLite emails the link for you. What arrives lands as attachments on that item, and list_uploaded_files reads them back with a download URL. This is the answer when the person has the file and the model does not: a hosted client cannot read a folder on someone\'s machine. The link is public for as long as it lasts, so keep expiryDays short and maxFiles tight, and revoke_upload_link when the material is in.',
+    {
+      itemId: z
+        .string()
+        .describe(
+          "Item (row) the files belong to, from query_items / create_item. Make the row first if the material has no home yet",
+        ),
+      clientName: z
+        .string()
+        .optional()
+        .describe("Who is being asked, shown on the upload page"),
+      clientEmail: z
+        .string()
+        .email()
+        .optional()
+        .describe(
+          "Send the link to this address. Omit to get the link back and pass it on yourself",
+        ),
+      clientPhone: z.string().optional().describe("Recorded with the request"),
+      message: z
+        .string()
+        .optional()
+        .describe(
+          'What to upload, in the words the recipient will read: "the four room photos and the price list"',
+        ),
+      maxFiles: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .describe("How many files the link accepts before it stops. Default 10"),
+      expiryDays: z
+        .number()
+        .int()
+        .min(1)
+        .max(90)
+        .optional()
+        .describe("How long the link lives. Default 7 days"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
+    async ({
+      itemId,
+      clientName,
+      clientEmail,
+      clientPhone,
+      message,
+      maxFiles,
+      expiryDays,
+      organizationId,
+    }: {
+      itemId: string;
+      clientName?: string;
+      clientEmail?: string;
+      clientPhone?: string;
+      message?: string;
+      maxFiles?: number;
+      expiryDays?: number;
+      organizationId?: string;
+    }) => {
+      const orgId = await resolveOrg(organizationId);
+      const body = {
+        itemId,
+        ...(clientName ? { clientName } : {}),
+        ...(clientEmail ? { clientEmail } : {}),
+        ...(clientPhone ? { clientPhone } : {}),
+        ...(message ? { message } : {}),
+        ...(maxFiles ? { maxFiles } : {}),
+        ...(expiryDays ? { expiryDays } : {}),
+      };
+      // With an address the server sends the invitation itself; without one it
+      // only mints the link and handing it over is the caller's business.
+      const path = clientEmail
+        ? `/api/client-uploads/request-material?organizationId=${orgId}`
+        : `/api/client-uploads/tokens?organizationId=${orgId}`;
+      const created = await getApi().request<{
+        id: string;
+        token: string;
+        expiresAt: string;
+        maxFiles: number;
+      }>("POST", path, body);
+      return ok({
+        uploadUrl: getApi().appUrl(`/upload/${created.token}`),
+        tokenId: created.id,
+        expiresAt: created.expiresAt,
+        maxFiles: created.maxFiles,
+        emailed: clientEmail ?? null,
+        note: clientEmail
+          ? "The link was emailed. Anyone holding it can upload until it expires; revoke_upload_link ends it early."
+          : "Hand this link to the person with the files. Anyone holding it can upload until it expires; revoke_upload_link ends it early.",
+      });
+    },
+  );
+
+  tool(
+    "list_uploaded_files",
+    "The files attached to an item, including everything that came in through a request_file_upload link, each with a download URL that is signed and short lived (mint a fresh one by calling again). Also lists the upload links on the item and how many files each has taken, which is how to tell whether the person you asked has delivered.",
+    {
+      itemId: z.string().describe("Item (row) id"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
+    async ({
+      itemId,
+      organizationId,
+    }: {
+      itemId: string;
+      organizationId?: string;
+    }) => {
+      const orgId = await resolveOrg(organizationId);
+      const files = await getApi().request<
+        Array<{
+          id: string;
+          fileName: string;
+          fileSize: number;
+          mimeType: string;
+          createdAt: string;
+          metadata?: Record<string, unknown>;
+        }>
+      >(
+        "GET",
+        `/api/attachments?entityType=item&entityId=${itemId}&organizationId=${orgId}`,
+      );
+      const links = await getApi()
+        .request<unknown>(
+          "GET",
+          `/api/client-uploads/tokens/item/${itemId}?organizationId=${orgId}`,
+        )
+        .catch(() => null);
+      // One signing call per file, capped: a board's worth of URLs that nobody
+      // opens is wasted work, and they expire before a long list is read.
+      const SIGN_AT_MOST = 20;
+      const list = Array.isArray(files) ? files : [];
+      const withUrls = await Promise.all(
+        list.slice(0, SIGN_AT_MOST).map(async (f) => {
+          const signed = await getApi()
+            .request<{ url: string }>(
+              "GET",
+              `/api/attachments/${f.id}/download-url?organizationId=${orgId}`,
+            )
+            .catch(() => null);
+          return { ...f, downloadUrl: signed?.url ?? null };
+        }),
+      );
+      return ok({
+        files: [...withUrls, ...list.slice(SIGN_AT_MOST)],
+        uploadLinks: links,
+        ...(list.length > SIGN_AT_MOST
+          ? {
+              note: `Download URLs were minted for the first ${SIGN_AT_MOST} files; call again for the rest.`,
+            }
+          : {}),
+      });
+    },
+  );
+
+  tool(
+    "revoke_upload_link",
+    "Close an upload link before it expires, so the address stops accepting files. The files already uploaded stay on the item. Use it as soon as the material is in, because until then anyone holding the link can add more.",
+    {
+      tokenId: z
+        .string()
+        .describe("Link id (the tokenId from request_file_upload)"),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
+    async ({
+      tokenId,
+      organizationId,
+    }: {
+      tokenId: string;
+      organizationId?: string;
+    }) => {
+      const orgId = await resolveOrg(organizationId);
+      await getApi().request(
+        "DELETE",
+        `/api/client-uploads/tokens/${tokenId}?organizationId=${orgId}`,
+      );
+      return ok({ revoked: true, tokenId });
+    },
   );
 
   // ── Group C: app layer (the backend of an external frontend) ───────────────
@@ -3194,7 +3416,7 @@ export function registerTools(
 
   tool(
     "deploy_frontend",
-    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files). In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
+    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files). A real build that already exists on the person's machine fits none of these from a hosted server: tell them to drop the zip on the app's Versions screen (the adminUrl of the app, then Versions), which deploys the same way and keeps the same version history. In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
     {
       appId: z
         .string()
@@ -3346,7 +3568,7 @@ export function registerTools(
         const abs = resolvePath(dir as string);
         if (!existsSync(abs) || !statSync(abs).isDirectory()) {
           throw new Error(
-            `Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/). If the MCP is not running on the machine with the files, pass them as \`files\` or a \`zipUrl\` instead.`,
+            `Directory not found: ${abs}. Run the build first, then pass the output folder (dist/, build/, out/). If the MCP is not running on the machine with the files (a hosted connector never is), pass them as \`files\`, or a \`zipUrl\`, or have the person upload the zip on the app's Versions screen at ${getApi().appUrl(`/apps/${appId}/deployments`)}.`,
           );
         }
         if (!existsSync(joinPath(abs, "index.html"))) {

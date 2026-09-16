@@ -3,6 +3,34 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.14.4, 2026-09-16
+
+Files can now reach TaskLite from the person who has them.
+
+A model cannot read a folder on someone's laptop, and a hosted connector
+runs on our server, not theirs. So anything that started life outside the
+chat, the customer's photos, a signed contract, a logo, a build zip, had
+nowhere to go: the advice was to publish it somewhere public first, which
+nobody does. The server has had token-based upload links for a while, used
+for asking a client for material from a row. They were never exposed as
+tools.
+
+### Added
+- `request_file_upload`: mints an upload link for an item,
+  `https://app.tasklite.net/upload/<token>`, that works with no account, no
+  login and no key. With `clientEmail` TaskLite sends it; without one the
+  link comes back to hand over. `maxFiles` and `expiryDays` bound it.
+- `list_uploaded_files`: the files on an item, each with a short-lived
+  download URL, plus the open links and how many files each has taken, so a
+  model can tell whether the person delivered.
+- `revoke_upload_link`: closes a link early. The files already uploaded stay.
+
+### Changed
+- `deploy_frontend` says what to do when the build is on the person's
+  machine and the server cannot see it: upload the zip on the app's Versions
+  screen, which deploys through the same route and keeps the same history.
+  The `dir` error now names that screen with the app's own URL.
+
 ## 0.14.3, 2026-09-13
 
 get_app_spec can return a real OpenAPI document.
