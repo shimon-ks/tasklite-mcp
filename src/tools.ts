@@ -386,6 +386,13 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
     idempotentHint: true,
     openWorldHint: false,
   },
+  get_deployment_files: {
+    title: "Read a deployed version's files",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   revoke_upload_link: {
     title: "Revoke a file upload link",
     readOnlyHint: false,
@@ -3416,7 +3423,7 @@ export function registerTools(
 
   tool(
     "deploy_frontend",
-    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files). A real build that already exists on the person's machine fits none of these from a hosted server: tell them to drop the zip on the app's Versions screen (the adminUrl of the app, then Versions), which deploys the same way and keeps the same version history. In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
+    "Deploy a static frontend to TaskLite hosting and get a live URL https://{slug}.tasklite.dev (HTTPS, auto-published on first deploy, versions kept for rollback_deployment). Hand over the frontend in ONE of three ways: `files`, the files inline (path + content), the way to go from ChatGPT or any hosted client: write index.html and its assets, then deploy in the same turn; `zipUrl`, a public https URL of a zip (a Lovable/Bolt export, a GitHub release asset); `dir`, a build output folder on this machine (only when the MCP runs locally next to the files); `fromAppId`, a version already hosted in the same organization, copied on the server (start a new app from an existing site, or bring an old version back as a new one; get_deployment_files reads a version first). A real build that already exists on the person's machine fits none of these from a hosted server: tell them to drop the zip on the app's Versions screen (the adminUrl of the app, then Versions), which deploys the same way and keeps the same version history. In the frontend, call the app API via relative /api/{endpoint}, the hosting proxy injects the app identity, so no key ships to the browser.",
     {
       appId: z
         .string()
@@ -3458,6 +3465,20 @@ export function registerTools(
         .describe(
           "Local path to the BUILD OUTPUT directory (the one containing index.html), not the project root. Only where the MCP runs on the same machine as the files",
         ),
+      fromAppId: z
+        .string()
+        .optional()
+        .describe(
+          "Deploy a version that is already hosted, copied on the server: another app in the same organization (start a new app from it), or this same app (bring an old version back as a new one). Nothing passes through the conversation, so any size works",
+        ),
+      fromVersion: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "With fromAppId: which version to copy (from list_deployments). Default: the live one",
+        ),
       organizationId: z
         .string()
         .optional()
@@ -3470,6 +3491,8 @@ export function registerTools(
       files,
       zipUrl,
       dir,
+      fromAppId,
+      fromVersion,
       organizationId,
     }: {
       appId: string;
@@ -3480,21 +3503,46 @@ export function registerTools(
       }>;
       zipUrl?: string;
       dir?: string;
+      fromAppId?: string;
+      fromVersion?: number;
       organizationId?: string;
     }) => {
       const given = [
         files ? "files" : "",
         zipUrl ? "zipUrl" : "",
         dir ? "dir" : "",
+        fromAppId ? "fromAppId" : "",
       ].filter(Boolean);
       if (given.length !== 1) {
         throw new Error(
           given.length === 0
-            ? "Pass the frontend as `files` (inline), `zipUrl` (public zip) or `dir` (local build folder)."
-            : `Pass only one of files / zipUrl / dir (got ${given.join(", ")}).`,
+            ? "Pass the frontend as `files` (inline), `zipUrl` (public zip), `dir` (local build folder) or `fromAppId` (copy a hosted version)."
+            : `Pass only one of files / zipUrl / dir / fromAppId (got ${given.join(", ")}).`,
+        );
+      }
+      if (fromVersion && !fromAppId) {
+        throw new Error(
+          "fromVersion goes with fromAppId. To make an old version of this app live again without a new version, use rollback_deployment.",
         );
       }
       const orgId = await resolveOrg(organizationId);
+
+      // A hosted version is copied by the server itself: the bytes never come
+      // through here, so the size limits of files / zipUrl do not apply.
+      if (fromAppId) {
+        const copied = await getApi().request<Record<string, unknown>>(
+          "POST",
+          `/organizations/${orgId}/apps/${appId}/deployments/copy`,
+          { fromAppId, ...(fromVersion ? { fromVersion } : {}) },
+        );
+        const { published: publishedByThisDeploy, ...rest } = copied;
+        return ok({
+          ...rest,
+          appPublished: true,
+          note: `Live now${publishedByThisDeploy ? " (this deploy also published the app)" : ""}. The source version is untouched. Old versions are kept for rollback (rollback_deployment); only the last 5 stay on disk.`,
+        });
+      }
+
       let buffer: Buffer;
 
       if (files) {
@@ -3625,6 +3673,68 @@ export function registerTools(
         await getApi().request(
           "GET",
           `/organizations/${orgId}/apps/${appId}/deployments`,
+        ),
+      );
+    },
+  );
+
+  tool(
+    "get_deployment_files",
+    'Read back what a hosted frontend version is made of: every file with its size and its URL on that version, and the full text of the text files (HTML, CSS, JS, JSON, SVG...). This is how a new conversation continues a site an earlier one built: "take my Krispool site and keep going" starts here, not from scratch. For a site written by hand the files ARE the source. For a bundled build (Vite, React) the JS is minified output: fine to inspect, not something to edit, so ask for the project\'s source instead. Images and other binaries come back as URLs only. Text is capped at 512KB per file and 4MB per call; narrow with `paths` for a big site. To start another app from this version, or bring an old version back as a new one, use deploy_frontend with fromAppId.',
+    {
+      appId: z
+        .string()
+        .describe("App id or slug (from list_apps / create_app)"),
+      version: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Version to read (from list_deployments). Default: the live version",
+        ),
+      paths: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Only these files, as listed by a previous call, e.g. ["index.html", "css/site.css"]',
+        ),
+      includeContent: z
+        .boolean()
+        .optional()
+        .describe(
+          "false lists the files without their text, a cheap first look at a large site. Default true",
+        ),
+      organizationId: z
+        .string()
+        .optional()
+        .describe(
+          "Organization id; defaults to the credential organization when omitted",
+        ),
+    },
+    async ({
+      appId,
+      version,
+      paths,
+      includeContent,
+      organizationId,
+    }: {
+      appId: string;
+      version?: number;
+      paths?: string[];
+      includeContent?: boolean;
+      organizationId?: string;
+    }) => {
+      const orgId = await resolveOrg(organizationId);
+      const qs = new URLSearchParams();
+      if (version) qs.set("version", String(version));
+      if (paths?.length) qs.set("paths", paths.join(","));
+      if (includeContent === false) qs.set("content", "false");
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return ok(
+        await getApi().request(
+          "GET",
+          `/organizations/${orgId}/apps/${appId}/deployments/files${suffix}`,
         ),
       );
     },

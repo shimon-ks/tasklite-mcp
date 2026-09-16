@@ -3,6 +3,27 @@
 All notable changes to `@tasklite/mcp`. Versions that were never published
 are folded into the next published one, so the numbers on npm may skip.
 
+## 0.14.5, 2026-09-16
+
+A hosted site can be read back and reused, not only rolled back.
+
+Every deployed version is a full copy of the site, and for a site written by
+hand that copy is the source. A new conversation asked to keep going on it
+could see the version numbers and none of the files, so it started over.
+
+### Added
+- `get_deployment_files`: every file of a version with its size and URL, and
+  the text of the text files. The live version unless one is named; `paths`
+  narrows it; `includeContent: false` lists without text. Text is capped at
+  512KB per file and 4MB per call, and a file left out says why.
+- `deploy_frontend` takes `fromAppId` (and optionally `fromVersion`): the
+  server copies a version that is already hosted in the same organization
+  into a new version of this app. From another app, a site forks into a new
+  one; from the same app, an old version comes back as a fresh version.
+  Nothing passes through the conversation, so size does not matter.
+
+Needs the backend with `GET deployments/files` and `POST deployments/copy`.
+
 ## 0.14.4, 2026-09-16
 
 Files can now reach TaskLite from the person who has them.
