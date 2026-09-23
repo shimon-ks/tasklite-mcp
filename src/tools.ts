@@ -543,6 +543,31 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
 },
 };
 
+// Row-level security of an app endpoint. Up to 0.15 the schema had no `mode`,
+// and zod drops keys it does not know: every endpoint a model asked to be
+// "shared" was stored as "owner" (the owner of a business then saw none of its
+// orders), and update_app_endpoint dropped rowLevelSecurity altogether, which
+// once left an admin endpoint readable by anyone (23.9).
+const RLS_SCHEMA = z.object({
+  enabled: z
+    .boolean()
+    .describe(
+      "true: every request must carry a signed-in user (the token from sign-in, or the app key with X-App-User)",
+    ),
+  mode: z
+    .enum(["owner", "shared", "phone"])
+    .optional()
+    .describe(
+      '"owner" (default): each user sees and edits only the rows they created. "shared": every user authorized on the app (listed on it, or an owner/admin of the organization) sees and edits every row; the mode for an admin screen or a team system. "phone": a user signed in with a code sent to their phone sees and edits only the rows whose phoneColumn holds that phone, e.g. a directory where each person keeps their own card',
+    ),
+  phoneColumn: z
+    .string()
+    .optional()
+    .describe(
+      'mode "phone" only: id of the column that holds each row\'s phone number (get_board_schema)',
+    ),
+});
+
 // An automation filter: every condition must hold for the actions to run.
 const CONDITIONS_SCHEMA = z
   .array(
@@ -2194,22 +2219,9 @@ export function registerTools(
         .describe(
           "Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata",
         ),
-      rowLevelSecurity: z
-        .object({
-          enabled: z
-            .boolean()
-            .describe(
-              "Scope every request to the calling app user (X-App-User header)",
-            ),
-          filterByUserId: z
-            .boolean()
-            .optional()
-            .describe("Also filter reads to rows the user created"),
-        })
-        .optional()
-        .describe(
-          "Row-level security: when enabled, each app user sees and edits only their own rows",
-        ),
+      rowLevelSecurity: RLS_SCHEMA.optional().describe(
+        "Row-level security. Off: whoever holds the app key reads everything. On: every request must name a signed-in user, and mode decides which rows they reach",
+      ),
       organizationId: z
         .string()
         .optional()
@@ -2303,6 +2315,11 @@ export function registerTools(
         .optional()
         .describe(
           "Replacement list of exposed columns (same shape as create_app_endpoint)",
+        ),
+      rowLevelSecurity: RLS_SCHEMA.nullable()
+        .optional()
+        .describe(
+          "Replacement row-level security (same shape as create_app_endpoint); null turns it off",
         ),
       isActive: z.boolean().optional().describe("Whether it is active"),
       organizationId: z
