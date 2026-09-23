@@ -527,6 +527,13 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
     idempotentHint: false,
     openWorldHint: true,
   },
+  update_automation: {
+    title: "Update automation",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   list_automations: {
     title: "List automations",
     readOnlyHint: true,
@@ -535,6 +542,53 @@ const ANNOTATIONS: Record<string, Record<string, unknown>> = {
     openWorldHint: false,
 },
 };
+
+// An automation filter: every condition must hold for the actions to run.
+const CONDITIONS_SCHEMA = z
+  .array(
+    z.object({
+      field: z
+        .string()
+        .describe(
+          "A column id on this board (from get_board_schema), or status, priority, title",
+        ),
+      operator: z
+        .string()
+        .describe(
+          "equals, not_equals, contains, not_contains, is_empty, is_not_empty, greater_than, less_than",
+        ),
+      value: z.any().optional().describe("The value to compare with"),
+    }),
+  )
+  .optional()
+  .describe(
+    'Run only for rows that match, e.g. [{ field: "<column id>", operator: "equals", value: "New seller" }]',
+  );
+
+/**
+ * create_cross_board_item reads config.columnValues and nothing else. On 23.9
+ * a model wrote { mapping: { source: target } } twice; both automations ran,
+ * "succeeded" and copied the title only. Refuse that shape with the right one.
+ */
+function checkCrossBoardActions(
+  actions: Array<{ type: string; config: Record<string, unknown> }>,
+): string | null {
+  for (const a of actions) {
+    if (a.type !== "create_cross_board_item") continue;
+    const cfg = a.config || {};
+    if (!cfg.targetBoardId) {
+      return "create_cross_board_item needs config.targetBoardId (the board to copy into).";
+    }
+    if ("mapping" in cfg || "fieldMapping" in cfg || "columnMapping" in cfg) {
+      return 'create_cross_board_item has no mapping field; it would copy the title only. Use config.columnValues: { "<column id on the TARGET board>": "{{<column name on this board>}}" }, one entry per column to copy. get_board_schema of both boards gives the ids and names.';
+    }
+    const values = cfg.columnValues;
+    if (values !== undefined && (typeof values !== "object" || values === null || Array.isArray(values))) {
+      return "create_cross_board_item config.columnValues must be an object: { <target column id>: <value or {{source column name}}> }.";
+    }
+  }
+  return null;
+}
 
 export function registerTools(
   server: McpServer,
@@ -1009,7 +1063,7 @@ export function registerTools(
       type: z
         .string()
         .describe(
-          "Column type: text, rich_text, number, status, date, datetime, duration, people, checkbox, dropdown, label, priority, link, email, phone, relation, lookup, rollup, rating, currency, file",
+          "Action type: http_request, send_notification, send_email, send_whatsapp, change_status, set_column_value, create_cross_board_item, send_webhook or delay",
         ),
       settings: z
         .record(z.any())
@@ -2993,7 +3047,7 @@ export function registerTools(
 
   tool(
     "create_automation",
-    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns, pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature.',
+    'Create an automation on a board: when something happens, do something. The most useful action here is http_request, which calls an external API and writes the answer back into columns, pair it with the "scheduled" trigger and the board keeps itself up to date (prices, exchange rates, shipment status, weather). Triggers: item_created, status_changed, column_value_changed, date_approaching, scheduled. Actions: http_request, send_notification, send_email, change_status, set_column_value, create_cross_board_item, send_webhook. Two more things every action list can use: a { type: "delay", config: { minutes | hours | days } } action pauses the run and resumes the actions after it later (reminders, follow-ups); and any network action (http_request, send_webhook, send_email, send_whatsapp) may carry config.retry: { attempts (1-5), delaySeconds (1-60) }. send_webhook accepts config.secret for an HMAC signature. create_cross_board_item copies a new row to another board: config { targetBoardId, title?: "{{item.title}}", columnValues: { "<column id on the TARGET board>": "{{<column NAME on this board>}}" } }; there is no mapping field, and a column left out is not copied. To act only on some rows pass conditions, e.g. [{ field: "<column id on this board>", operator: "equals", value: "New seller" }]. Change an automation later with update_automation; call list_automations first so you do not add a second one that does the same thing.',
     {
       projectId: z
         .string()
@@ -3037,6 +3091,7 @@ export function registerTools(
         .describe(
           'e.g. [{ type: "http_request", config: { url: "https://api.frankfurter.app/latest?from=USD&to=ILS", method: "GET", responseMapping: [{ path: "rates.ILS", columnId: "<column id from get_board_schema>" }] } }]',
         ),
+      conditions: CONDITIONS_SCHEMA,
       isActive: z.boolean().optional().describe("Whether it is active"),
     },
     async ({
@@ -3046,8 +3101,11 @@ export function registerTools(
       trigger,
       triggerConfig,
       actions,
+      conditions,
       isActive,
     }) => {
+      const crossBoardProblem = checkCrossBoardActions(actions);
+      if (crossBoardProblem) return ok({ error: crossBoardProblem });
       // http_request maps response paths onto real column ids. A model that
       // guessed a name instead would create an automation that runs, succeeds,
       // and writes nothing, so say it plainly rather than let it fail quietly.
@@ -3075,12 +3133,83 @@ export function registerTools(
       const automation = await getApi().request<any>(
         "POST",
         `/projects/${projectId}/boards/${boardId}/automations`,
-        { name, trigger, triggerConfig, actions, isActive: isActive ?? true },
+        {
+          name,
+          trigger,
+          triggerConfig,
+          actions,
+          conditions,
+          isActive: isActive ?? true,
+        },
       );
       return ok({
         automation,
         adminUrl: getApi().appUrl(`/projects/${projectId}/boards/${boardId}`),
       });
+    },
+  );
+
+  tool(
+    "update_automation",
+    "Change an existing automation: its actions, conditions, trigger config or name, or switch it off with isActive false. Fields left out stay as they are; actions and conditions, when given, replace the whole list. Use it to fix an automation instead of creating a second one next to it. Get the id from list_automations.",
+    {
+      projectId: z
+        .string()
+        .describe("Project id (from list_projects / create_project)"),
+      boardId: z.string().describe("Board id the automation belongs to"),
+      automationId: z
+        .string()
+        .describe("Automation id (from list_automations)"),
+      name: z.string().optional().describe("New name"),
+      triggerConfig: z
+        .record(z.any())
+        .optional()
+        .describe("New trigger config"),
+      actions: z
+        .array(
+          z.object({
+            type: z.string().describe("Action type, as in create_automation"),
+            config: z.record(z.any()).describe("Action-specific config"),
+          }),
+        )
+        .optional()
+        .describe("The full new list of actions (replaces the old one)"),
+      conditions: CONDITIONS_SCHEMA,
+      isActive: z
+        .boolean()
+        .optional()
+        .describe("false switches it off, true on"),
+    },
+    async ({
+      projectId,
+      boardId,
+      automationId,
+      name,
+      triggerConfig,
+      actions,
+      conditions,
+      isActive,
+    }) => {
+      if (actions) {
+        const crossBoardProblem = checkCrossBoardActions(actions);
+        if (crossBoardProblem) return ok({ error: crossBoardProblem });
+      }
+      const body: Record<string, unknown> = {};
+      if (name !== undefined) body.name = name;
+      if (triggerConfig !== undefined) body.triggerConfig = triggerConfig;
+      if (actions !== undefined) body.actions = actions;
+      if (conditions !== undefined) body.conditions = conditions;
+      if (isActive !== undefined) body.isActive = isActive;
+      if (!Object.keys(body).length) {
+        return ok({ error: "Nothing to change: pass at least one field." });
+      }
+      return ok(
+        await getApi().request(
+          "PATCH",
+          `/projects/${projectId}/boards/${boardId}/automations/${automationId}`,
+          body,
+        ),
+      );
     },
   );
 
