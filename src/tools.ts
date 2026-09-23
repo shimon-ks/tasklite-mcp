@@ -2152,6 +2152,33 @@ export function registerTools(
     },
   );
 
+  // The platform applies enabled, mode and claimByPhoneColumn, and refuses
+  // anything else with a 400 (filterByUserId used to be offered here).
+  const rowLevelSecuritySchema = z
+    .object({
+      enabled: z
+        .boolean()
+        .describe(
+          "Scope every request to the calling app user: the token the end user got from signing in, or the app key with the X-App-User header",
+        ),
+      mode: z
+        .enum(["owner", "shared"])
+        .optional()
+        .describe(
+          'owner (default): each user sees and edits only their own rows. shared: every user authorized on the app reads the same rows',
+        ),
+      claimByPhoneColumn: z
+        .string()
+        .optional()
+        .describe(
+          "Owner mode only. Id of a column on this board that holds a phone number. Rows imported before anyone signed in belong to nobody; a user whose phone was verified by OTP takes over the unowned rows with their phone, then sees and edits exactly those. Use it when the owner loads a list of people (sellers, members, tenants, trainees) and each should edit their own row. Users without a verified phone claim nothing",
+        ),
+    })
+    .optional()
+    .describe(
+      "Row-level security: when enabled, each app user sees and edits only their own rows",
+    );
+
   tool(
     "create_app_endpoint",
     "Expose a board as a REST endpoint of an app: /apps/{appSlug}/api/{slug}. exposedColumns limits which columns are readable/writable. rowLevelSecurity.enabled makes the endpoint per-user: the developer's server sends `X-App-User: <their user id>` next to the API key, and the endpoint returns, updates and deletes ONLY that user's rows (401 without the header). Use it whenever the app has its own users.",
@@ -2194,22 +2221,7 @@ export function registerTools(
         .describe(
           "Columns the endpoint reads and writes, with the JSON key each one gets; without it the endpoint returns bare metadata",
         ),
-      rowLevelSecurity: z
-        .object({
-          enabled: z
-            .boolean()
-            .describe(
-              "Scope every request to the calling app user (X-App-User header)",
-            ),
-          filterByUserId: z
-            .boolean()
-            .optional()
-            .describe("Also filter reads to rows the user created"),
-        })
-        .optional()
-        .describe(
-          "Row-level security: when enabled, each app user sees and edits only their own rows",
-        ),
+      rowLevelSecurity: rowLevelSecuritySchema,
       organizationId: z
         .string()
         .optional()
@@ -2305,6 +2317,7 @@ export function registerTools(
           "Replacement list of exposed columns (same shape as create_app_endpoint)",
         ),
       isActive: z.boolean().optional().describe("Whether it is active"),
+      rowLevelSecurity: rowLevelSecuritySchema,
       organizationId: z
         .string()
         .optional()
