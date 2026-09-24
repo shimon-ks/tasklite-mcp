@@ -6,7 +6,7 @@
   "version": "0.14.5",
   "websiteUrl": "https://tasklite.net/docs",
   "repository": {
-    "url": "https://github.com/shimon-ks/tasklite-mcp",
+    "url": "https://github.com/tasklite-net/tasklite-mcp",
     "source": "github"
   },
   "remotes": [

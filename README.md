@@ -88,7 +88,7 @@ One hosted server, every MCP client. Full setup notes: https://tasklite.net/docs
 - **Cursor**: [Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=tasklite&config=eyJ1cmwiOiAiaHR0cHM6Ly9tY3AudGFza2xpdGUubmV0L21jcCJ9) or put `{"mcpServers":{"tasklite":{"url":"https://mcp.tasklite.net/mcp"}}}` in `.cursor/mcp.json`.
 - **VS Code**: [Install in VS Code](vscode:mcp/install?%7B%22name%22%3A%20%22tasklite%22%2C%20%22type%22%3A%20%22http%22%2C%20%22url%22%3A%20%22https%3A//mcp.tasklite.net/mcp%22%7D) or `.vscode/mcp.json` with `{"servers":{"tasklite":{"type":"http","url":"https://mcp.tasklite.net/mcp"}}}`.
 - **ChatGPT**: Settings → Connectors (developer mode) → add `https://mcp.tasklite.net/mcp`. The server implements `search` and `fetch`.
-- **Gemini CLI**: `gemini extensions install https://github.com/shimon-ks/tasklite-mcp` (this repo ships `gemini-extension.json`), or add `httpUrl` + `oauth` to `~/.gemini/settings.json`.
+- **Gemini CLI**: `gemini extensions install https://github.com/tasklite-net/tasklite-mcp` (this repo ships `gemini-extension.json`), or add `httpUrl` + `oauth` to `~/.gemini/settings.json`.
 - **OpenAI Responses API / Agents SDK, Gemini API**: pass the hosted URL with `Authorization: Bearer tl_…`.
 
 ## Typical flow (what Claude Code does)

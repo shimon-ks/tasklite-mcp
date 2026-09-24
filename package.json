@@ -6,10 +6,10 @@
   "homepage": "https://tasklite.net",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shimon-ks/tasklite-mcp.git"
+    "url": "git+https://github.com/tasklite-net/tasklite-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/shimon-ks/tasklite-mcp/issues"
+    "url": "https://github.com/tasklite-net/tasklite-mcp/issues"
   },
   "mcpName": "net.tasklite/mcp",
   "keywords": [

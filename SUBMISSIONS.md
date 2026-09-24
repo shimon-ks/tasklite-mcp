@@ -9,7 +9,7 @@ Copy the blocks as they are.
 | Package | `@tasklite/mcp` |
 | Version | **0.14.1** |
 | Tools | **43 hosted**, 48 local |
-| Repo | https://github.com/shimon-ks/tasklite-mcp |
+| Repo | https://github.com/tasklite-net/tasklite-mcp |
 | Site | https://tasklite.net |
 | Docs | https://tasklite.net/docs |
 | Hosted | `https://mcp.tasklite.net/mcp` (Streamable HTTP, OAuth) |
@@ -101,7 +101,7 @@ Works from Claude Code, Claude Desktop, ChatGPT, Gemini CLI, Cursor and VS Code.
 Unrelated to the TaskLite CLI task manager at tasklite.org.
 ```
 
-**GitHub:** `https://github.com/shimon-ks/tasklite-mcp`
+**GitHub:** `https://github.com/tasklite-net/tasklite-mcp`
 **Install:** `npx -y @tasklite/mcp`
 **Category:** Database, or Developer Tools
 
